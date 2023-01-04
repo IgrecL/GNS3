@@ -1,0 +1,20 @@
+configure terminal
+    ipv6 unicast-routing
+    ipv6 router ospf 1
+        router-id 8.8.8.8
+        exit
+    interface FastEthernet 0/0
+        ipv6 address 2002:192:168:5::8/64
+        ipv6 ospf 1 area 0
+        no shutdown
+        exit
+    interface FastEthernet 0/1
+        ipv6 address 2002:192:168:9::8/64
+        ipv6 ospf 1 area 0
+        no shutdown
+        exit
+    interface FastEthernet 1/0
+        ipv6 address 2003:192:168:0::8/64
+        ipv6 ospf 1 area 0
+        no shutdown
+        end
