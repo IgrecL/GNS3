@@ -39,4 +39,5 @@ configure terminal
             neighbor 2002:192:168:3::10 activate
             neighbor 2002:192:168:5::8 activate
             neighbor 2003:192:168:1::7 activate
+            redistribute ospf 1
             end
