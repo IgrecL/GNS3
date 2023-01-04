@@ -29,7 +29,6 @@ configure terminal
         neighbor 2001:192:168:3::4 remote-as 1
         neighbor 2001:192:168:4::5 remote-as 1
         neighbor 2001:192:168:5::6 remote-as 1
-        neighbor 2001:192:168:7::7 remote-as 1
         neighbor 2003:192:168:1::9 remote-as 2
         address-family ipv6 unicast
             neighbor 2001:192:168:0::1 activate
@@ -38,6 +37,5 @@ configure terminal
             neighbor 2001:192:168:3::4 activate
             neighbor 2001:192:168:4::5 activate
             neighbor 2001:192:168:5::6 activate
-            neighbor 2001:192:168:7::7 activate
             neighbor 2003:192:168:1::9 activate
             end
