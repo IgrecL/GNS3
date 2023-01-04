@@ -1,9 +1,15 @@
 configure terminal
+    ipv6 unicast-routing
     interface FastEthernet 0/0
         ipv6 address 2001:192:168:0::1/64
+        ipv6 rip ripng enable
         no shutdown
         exit
     interface FastEthernet 0/1
         ipv6 address 2001:192:168:1::1/64
+        ipv6 rip ripng enable
         no shutdown
+        exit
+    ipv6 router rip ripng
+        redistribute connected
         end
