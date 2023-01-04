@@ -1,0 +1,13 @@
+configure terminal
+    interface FastEthernet 0/0
+        ipv6 address 2001:192:168:5::6/64
+        no shutdown
+        exit
+    interface FastEthernet 0/1
+        ipv6 address 2001:192:168:9::6/64
+        no shutdown
+        exit
+    interface FastEthernet 1/0
+        ipv6 address 2001:192:168:10::6/64
+        no shutdown
+        end
