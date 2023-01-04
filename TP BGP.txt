@@ -1,0 +1,246 @@
+-- CONF IPV6:
+
+- R1
+enable
+configure terminal
+ipv6 unicast-routing
+end
+
+interface gigabitEthernet 1/0
+ipv6 enable
+ipv6 address 2001:100:1:1::1/64
+no shutdown
+interface gigabitEthernet 2/0
+ipv6 enable
+ipv6 address 2001:100:4:1::2/64
+no shutdown
+
+- R2
+enable
+configure terminal
+ipv6 unicast-routing
+end
+
+interface gigabitEthernet 1/0
+ipv6 enable
+ipv6 address 2001:100:4:1::1/64
+no shutdown
+interface gigabitEthernet 2/0
+ipv6 enable
+ipv6 address 2001:100:4:3::1/64
+no shutdown
+
+- R3
+enable
+configure terminal
+ipv6 unicast-routing
+end
+
+interface gigabitEthernet 1/0
+ipv6 enable
+ipv6 address 2001:100:4:2::1/64
+no shutdown
+interface gigabitEthernet 2/0
+ipv6 enable
+ipv6 address 2001:100:4:3::2/64
+no shutdown
+
+- R4
+enable
+configure terminal
+ipv6 unicast-routing
+end
+
+interface gigabitEthernet 1/0
+ipv6 enable
+ipv6 address 2001:100:1:2::1/64
+no shutdown
+interface gigabitEthernet 2/0
+ipv6 enable
+ipv6 address 2001:100:4:2::2/64
+no shutdown
+
+
+-- CONF BGP SESSIONS
+
+- R1
+router bgp 111
+no bgp default ipv4-unicast
+bgp router-id 1.1.1.1
+neighbor 2001:100:4:1::1 remote-as 112
+address-family ipv6 unicast
+neighbor 2001:100:4:1::1 activate
+
+- R2
+router bgp 112
+no bgp default ipv4-unicast
+bgp router-id 2.2.2.2
+neighbor 2001:100:4:1::2 remote-as 111
+address-family ipv6 unicast
+neighbor 2001:100:4:1::2 activate
+neighbor 2001:100:4:3::2 remote-as 113
+address-family ipv6 unicast
+neighbor 2001:100:4:3::2 activate
+
+- R3
+router bgp 113
+no bgp default ipv4-unicast
+bgp router-id 3.3.3.3
+neighbor 2001:100:4:3::1 remote-as 112
+address-family ipv6 unicast
+neighbor 2001:100:4:3::1 activate
+neighbor 2001:100:4:2::2 remote-as 114
+address-family ipv6 unicast
+neighbor 2001:100:4:2::2 activate
+
+- R4
+router bgp 114
+no bgp default ipv4-unicast
+bgp router-id 4.4.4.4
+neighbor 2001:100:4:2::1 remote-as 113
+address-family ipv6 unicast
+neighbor 2001:100:4:2::1 activate
+
+-- Network advertisement BGP
+
+-R1
+conf t 
+router bgp 111
+address-family ipv6 unicast
+network 2001:100:1:1::/64
+network 2001:100:4:1::/64
+
+-R2
+conf t 
+router bgp 112
+address-family ipv6 unicast
+network 2001:100:4:3::/64
+network 2001:100:4:1::/64
+
+-R3
+conf t 
+router bgp 113
+address-family ipv6 unicast
+network 2001:100:4:2::/64
+network 2001:100:4:3::/64
+
+-R4
+conf t 
+router bgp 114
+address-family ipv6 unicast
+network 2001:100:1:2::/64
+network 2001:100:4:2::/64
+
+-- BGP filtering
+
+- R1
+conf t
+interface gigabitEthernet 1/0
+ipv6 address 2001:100:1:11::1/64
+ipv6 address 2001:100:1:12::1/64
+ipv6 address 2001:100:1:13::1/64
+ipv6 address 2001:200:200:201::1/64
+no shutdown
+
+conf t 
+router bgp 111
+address-family ipv6 unicast
+network 2001:100:1:11::/64
+network 2001:100:1:12::/64
+network 2001:100:1:13::/64
+network 2001:200:200:201::/64
+
+- R4
+conf t
+interface gigabitEthernet 1/0
+ipv6 address 2001:100:1:41::1/64
+ipv6 address 2001:100:1:42::1/64
+ipv6 address 2001:100:1:43::1/64
+ipv6 address 2001:200:200:204::1/64
+no shutdown
+
+conf t 
+router bgp 114
+address-family ipv6 unicast
+network 2001:100:1:41::/64
+network 2001:100:1:42::/64
+network 2001:100:1:43::/64
+network 2001:200:200:204::/64
+
+- R2
+conf t
+ipv6 access-list acl12
+permit 2001:200:200:201::/64 any
+exit
+route-map R2_mt deny 10
+match ipv6 address acl12
+exit
+route-map R2_mt permit 20
+exit
+router bgp 112
+address-family ipv6 unicast
+neighbor 2001:100:4:1::2 route-map R2_mt in
+
+- R3
+conf t
+ipv6 access-list acl34
+permit 2001:200:200:204::/64 any
+exit
+route-map R3_mt deny 10
+match ipv6 address acl34
+exit
+route-map R3_mt permit 20
+exit
+router bgp 113
+address-family ipv6 unicast
+neighbor 2001:100:4:2::2 route-map R3_mt in
+
+-- Filtering in function of the AS_PATH
+
+- R1 conf ipv6
+interface fastEthernet 0/0
+ipv6 enable
+ipv6 address 2001:100:4:4::1/64
+no shutdown
+
+-R4 conf ipv6
+interface fastEthernet 0/0
+ipv6 enable
+ipv6 address 2001:100:4:4::4/64
+no shutdown
+
+- R1 conf BGP
+router bgp 111
+neighbor 2001:100:4:4::4 remote-as 114
+address-family ipv6 unicast
+neighbor 2001:100:4:4::4 activate
+network 2001:100:4:4::/64
+
+- R4 conf BGP
+router bgp 114
+neighbor 2001:100:4:4::1 remote-as 111
+address-family ipv6 unicast
+neighbor 2001:100:4:4::1 activate
+network 2001:100:4:4::/64
+
+- R3 local pref
+neighbor 2001:100:4:2::2 route-map LOCAL-PREF-150 in
+route-map LOCAL-PREF-150
+set local-preference 150
+end
+clear bgp ipv6 unicast *
+
+- R4 route map
+ip as-path access-list 1 permit _111_
+route-map R4_mt deny 10
+match as-path 1
+exit
+router bgp 114
+neighbor 2001:100:4:2::1 route-map R4_mt out
+
+- R1 prepend
+neighbor 2001:100:4:1::1 route-map pp out
+route-map pp permit 10     
+set as-path prepend 111 111
+
+
