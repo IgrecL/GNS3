@@ -67,11 +67,11 @@ no shutdown
 
 - R1
 router bgp 111
-no bgp default ipv4-unicast
-bgp router-id 1.1.1.1
-neighbor 2001:100:4:1::1 remote-as 112
-address-family ipv6 unicast
-neighbor 2001:100:4:1::1 activate
+    no bgp default ipv4-unicast
+    bgp router-id 1.1.1.1
+    neighbor 2001:100:4:1::1 remote-as 112
+    address-family ipv6 unicast
+        neighbor 2001:100:4:1::1 activate
 
 - R2
 router bgp 112

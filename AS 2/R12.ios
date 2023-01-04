@@ -4,17 +4,37 @@ configure terminal
         router-id 12.12.12.12
         exit
     interface FastEthernet 0/0
+        ipv6 enable
         ipv6 address 2002:192:168:0::12/64
         ipv6 ospf 1 area 0
         no shutdown
         exit
     interface FastEthernet 0/1
+        ipv6 enable
         ipv6 address 2002:192:168:3::12/64
         ipv6 ospf 1 area 0
         no shutdown
         exit
     interface FastEthernet 1/0
+        ipv6 enable
         ipv6 address 2002:192:168:2::12/64
         ipv6 ospf 1 area 0
         no shutdown
-        end
+        exit
+    router bgp 2
+        no bgp default ipv4-unicast
+        bgp router-id 12.12.12.12
+        neighbor 2002:192:168:0::14 remote-as 2
+        neighbor 2002:192:168:1::13 remote-as 2
+        neighbor 2002:192:168:4::11 remote-as 2
+        neighbor 2002:192:168:3::10 remote-as 2
+        neighbor 2002:192:168:7::9 remote-as 2
+        neighbor 2002:192:168:5::8 remote-as 2
+        address-family ipv6 unicast
+            neighbor 2002:192:168:0::14 activate
+            neighbor 2002:192:168:1::13 activate
+            neighbor 2002:192:168:4::11 activate
+            neighbor 2002:192:168:3::10 activate
+            neighbor 2002:192:168:7::9 activate
+            neighbor 2002:192:168:5::8 activate
+            end
