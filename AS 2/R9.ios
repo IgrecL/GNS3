@@ -3,6 +3,12 @@ configure terminal
     ipv6 router ospf 1
         router-id 9.9.9.9
         exit
+    interface Loopback 0
+        ipv6 enable
+        ipv6 address 9:9:9:9:9:9:9:9/128
+        ipv6 ospf 1 area 0
+        no shutdown
+        exit
     interface FastEthernet 0/0
         ipv6 enable
         ipv6 address 2002:192:168:7::9/64
@@ -24,20 +30,26 @@ configure terminal
     router bgp 2
         no bgp default ipv4-unicast
         bgp router-id 9.9.9.9
-        neighbor 2002:192:168:0::14 remote-as 2
-        neighbor 2002:192:168:1::13 remote-as 2
-        neighbor 2002:192:168:0::12 remote-as 2
-        neighbor 2002:192:168:4::11 remote-as 2
-        neighbor 2002:192:168:3::10 remote-as 2
-        neighbor 2002:192:168:5::8 remote-as 2
+        neighbor 8:8:8:8:8:8:8:8 remote-as 2
+        neighbor 10:10:10:10:10:10:10:10 remote-as 2
+        neighbor 11:11:11:11:11:11:11:11 remote-as 2
+        neighbor 12:12:12:12:12:12:12:12 remote-as 2
+        neighbor 13:13:13:13:13:13:13:13 remote-as 2
+        neighbor 14:14:14:14:14:14:14:14 remote-as 2
         neighbor 2003:192:168:1::7 remote-as 1
+        neighbor 8:8:8:8:8:8:8:8 update-source Loopback0
+        neighbor 10:10:10:10:10:10:10:10 update-source Loopback0
+        neighbor 11:11:11:11:11:11:11:11 update-source Loopback0
+        neighbor 12:12:12:12:12:12:12:12 update-source Loopback0
+        neighbor 13:13:13:13:13:13:13:13 update-source Loopback0
+        neighbor 14:14:14:14:14:14:14:14 update-source Loopback0
         address-family ipv6 unicast
-            neighbor 2002:192:168:0::14 activate
-            neighbor 2002:192:168:1::13 activate
-            neighbor 2002:192:168:0::12 activate
-            neighbor 2002:192:168:4::11 activate
-            neighbor 2002:192:168:3::10 activate
-            neighbor 2002:192:168:5::8 activate
+            neighbor 8:8:8:8:8:8:8:8 activate
+            neighbor 10:10:10:10:10:10:10:10 activate
+            neighbor 11:11:11:11:11:11:11:11 activate
+            neighbor 12:12:12:12:12:12:12:12 activate
+            neighbor 13:13:13:13:13:13:13:13 activate
+            neighbor 14:14:14:14:14:14:14:14 activate
             neighbor 2003:192:168:1::7 activate
             redistribute ospf 1
             end
