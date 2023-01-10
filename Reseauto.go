@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 )
 
@@ -16,7 +17,7 @@ type Interface struct {
 
 type Router struct {
 	id         int
-	interfaces []string
+	interfaces []Interface
 	ASBR       bool
 }
 
@@ -130,4 +131,9 @@ func main() {
 	AS1 := importAS("AS1.json")
 	AS2 := importAS("AS2.json")
 	fmt.Println("Résultat :", links, AS1, AS2)
+
+	output := "salut"
+	if err := os.WriteFile("output.ios", []byte(output), 0666); err != nil {
+		log.Fatal(err)
+	}
 }
