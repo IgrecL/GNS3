@@ -6,29 +6,72 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 )
 
-type Link [2]int
+type Link [2]Interface
 
-type Interface struct {
-	name string
-	ip   string
+type IP struct {
+	digits [8]int
+	mask   int
 }
 
-type Router struct {
-	id         int
-	interfaces []Interface
-	ASBR       bool
+func (ip IP) toString() string {
+	var str string
+	for i := 0; i < 8; i++ {
+		str += strconv.FormatInt(int64(ip.digits[i]), 16) + ":"
+	}
+	str = str[:len(str)-1]
+	str += "/" + fmt.Sprint(ip.mask)
+	return str
+}
+
+func (ip *IP) toInt(ipString string) {
+	split := strings.Split(ipString, ":")
+	if len(split) < 8 {
+		var splitComplet [8]string
+		var stop bool
+		var i, j int = 0, 0
+		for ; !stop; i++ {
+			splitComplet[i] = split[i]
+			if split[i] == "" {
+				stop = true
+			}
+		}
+		stop = false
+		for ; !stop; j++ {
+			splitComplet[7-j] = split[len(split)-1-j]
+			if split[len(split)-1-j] == "" {
+				stop = true
+			}
+		}
+		split = splitComplet[:]
+	}
+	split2 := strings.Split(split[7], "/")
+	split[7] = split2[0]
+	ip.mask, _ = strconv.Atoi(split2[1])
+	for i, s := range split {
+		numHex, _ := strconv.ParseInt(s, 16, 64)
+		ip.digits[i] = int(numHex)
+	}
+}
+
+type Interface struct {
+	name     string
+	ip       IP
+	idRouter int
+	ASBR     bool
 }
 
 type AS struct {
-	ASN     string
-	IGP     string
-	routers []Router
-	adj     [][]int
+	ASN       int
+	IGP       string
+	routersId []int
+	adj       [][]*Link
 }
 
-func importLinks(url string) []Link {
+func importGlobal(url string) ([]Link, [2]IP) {
 	// Importing .json files
 	file, _ := os.Open(url)
 	defer file.Close()
@@ -37,7 +80,8 @@ func importLinks(url string) []Link {
 	data, err := io.ReadAll(file)
 	if err != nil {
 		fmt.Println(err)
-		return nil
+		var nilArray [2]IP
+		return nil, nilArray
 	}
 
 	// On caste le contenu en map de string
@@ -45,20 +89,30 @@ func importLinks(url string) []Link {
 	err = json.Unmarshal([]byte(data), &linksMap)
 	if err != nil {
 		fmt.Println(err)
-		return nil
+		var nilArray [2]IP
+		return nil, nilArray
 	}
+
+	// On récupère la pool d'IP
+	var ipRange [2]IP
+	ipRange[0].toInt(linksMap["ip_range"].([]any)[0].(string))
+	ipRange[1].toInt(linksMap["ip_range"].([]any)[1].(string))
 
 	// On boucle dans la map pour extraire les valeurs et créer un []Link
 	var links []Link
 	for _, value := range linksMap["links"].([]any) {
 		var link Link
 		for i, value2 := range value.([]any) {
-			link[i] = int(value2.(float64))
+			var in Interface
+			in.idRouter = int(value2.(map[string]any)["id"].(float64))
+			in.name = value2.(map[string]any)["interface"].(string)
+			in.ASBR = true
+			link[i] = in
 		}
 		links = append(links, link)
 	}
 
-	return links
+	return links, ipRange
 }
 
 func importAS(url string) AS {
@@ -74,7 +128,7 @@ func importAS(url string) AS {
 	}
 
 	// On caste le contenu en map de string
-	var ASMap map[string]interface{}
+	var ASMap map[string]any
 	err = json.Unmarshal([]byte(data), &ASMap)
 	if err != nil {
 		fmt.Println(err)
@@ -87,31 +141,40 @@ func importAS(url string) AS {
 
 	// On importe la liste des routeurs de l'AS
 	for _, value := range ASMap["routers"].([]any) {
-		var router Router
-		router.id = int(value.(float64))
-		as.routers = append(as.routers, router)
+		as.routersId = append(as.routersId, int(value.(float64)))
 	}
 
 	// On initialise la matrice d'adjacence
-	as.adj = make([][]int, len(as.routers))
-	for i := range as.routers {
-		as.adj[i] = make([]int, len(as.routers))
+	as.adj = make([][]*Link, len(as.routersId))
+	for i := range as.routersId {
+		as.adj[i] = make([]*Link, len(as.routersId))
 	}
 
 	// On remplit la matrice d'adjacence
 	for _, value := range ASMap["links"].([]any) {
-		r1 := int(value.([]any)[0].(float64))
-		r2 := int(value.([]any)[1].(float64))
-		var idr1, idr2 int
-		for i, v := range as.routers {
-			if v.id == r1 {
-				idr1 = i
+
+		// On récupère les id et les noms d'interface
+		var int1, int2 Interface
+		int1.idRouter = int(value.([]any)[0].(map[string]any)["id"].(float64))
+		int2.idRouter = int(value.([]any)[1].(map[string]any)["id"].(float64))
+		int1.name = value.([]any)[0].(map[string]any)["interface"].(string)
+		int2.name = value.([]any)[1].(map[string]any)["interface"].(string)
+		var link Link
+		link[0], link[1] = int1, int2
+
+		// On récupère l'indice du routeur dans la liste de routeurs
+		var index1, index2 int
+		for i, id := range as.routersId {
+			if id == int1.idRouter {
+				index1 = i
 			}
-			if v.id == r2 {
-				idr2 = i
+			if id == int2.idRouter {
+				index2 = i
 			}
 		}
-		as.adj[idr1][idr2], as.adj[idr2][idr1] = 1, 1
+
+		// On remplit la matrice d'adjacence de liens
+		as.adj[index1][index2] = &link
 	}
 
 	return as
@@ -127,10 +190,37 @@ func printMat(M [][]int) {
 }
 
 func main() {
-	links := importLinks("Links.json")
-	AS1 := importAS("AS1.json")
-	AS2 := importAS("AS2.json")
-	fmt.Println("Résultat :", links, AS1, AS2)
+
+	// On importe le contenu des fichiers .json
+	global, ipRange := importGlobal("Global.json")
+	var ASList []AS
+	ASList = append(ASList, importAS("AS1.json"))
+	ASList = append(ASList, importAS("AS2.json"))
+
+	for i := 0; i < len(ASList); i++ {
+		ASList[i].ASN = i
+	}
+
+	global, ipRange, ASList = global, ipRange, ASList
+
+	// for _, AS := range ASList {
+
+	// 	// len(AS.routers)
+
+	// 	// for i := 0; i < len(AS.routersId); i++ {
+	// 	// 	for j := 0; j < i; j++ {
+	// 	// 		if AS.adj[i][j] == 1 {
+	// 	// 			// var in Interface = {"GigabitEthernet0/0", ip}
+	// 	// 			// AS.routers[i].interfaces = append(AS.routers[i].interfaces, )
+	// 	// 		}
+	// 	// 	}
+	// 	// }
+
+	// }
+
+	var ip IP
+	ip.toInt("2001:192:168:FF::24:2/64")
+	fmt.Println(ip.toString())
 
 	output := "salut"
 	if err := os.WriteFile("output.ios", []byte(output), 0666); err != nil {
