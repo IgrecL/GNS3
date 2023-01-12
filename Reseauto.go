@@ -4,13 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 )
-
-type Link [2]Interface
 
 type IP struct {
 	digits [8]int
@@ -57,12 +54,40 @@ func (ip *IP) toInt(ipString string) {
 	}
 }
 
+func (ip IP) increment() IP {
+	var new IP
+	for i, v := range ip.digits {
+		new.digits[i] = v
+	}
+	new.mask = ip.mask
+	for i := 7; i >= 0; i-- {
+		if new.digits[i] == 65535 {
+			new.digits[i] = 0
+		} else {
+			new.digits[i]++
+			break
+		}
+	}
+	return new
+}
+
+func (ip1 IP) equals(ip2 IP) bool {
+	for i := 0; i < 8; i++ {
+		if ip1.digits[i] != ip2.digits[i] {
+			return false
+		}
+	}
+	return true
+}
+
 type Interface struct {
 	name     string
 	ip       IP
 	idRouter int
 	ASBR     bool
 }
+
+type Link [2]Interface
 
 type AS struct {
 	ASN       int
@@ -189,6 +214,27 @@ func printMat(M [][]int) {
 	}
 }
 
+func giveIP(ASList []AS, ipRange [2]IP) {
+	ipMin, ipMax := ipRange[0], ipRange[1]
+	for _, AS := range ASList {
+		for i := 0; i < len(AS.routersId); i++ {
+			for j := 0; j < i; j++ {
+				if AS.adj[i][j] != nil {
+					for k := 0; k < 2; k++ {
+						if ipMin.equals(ipMax.increment()) {
+							fmt.Println("L'IP maximale a été atteinte !")
+							return
+						}
+						(AS.adj[i][j])[k].ip = ipMin
+						fmt.Println((AS.adj[i][j])[k].ip.toString())
+						ipMin = ipMin.increment()
+					}
+				}
+			}
+		}
+	}
+}
+
 func main() {
 
 	// On importe le contenu des fichiers .json
@@ -197,33 +243,18 @@ func main() {
 	ASList = append(ASList, importAS("AS1.json"))
 	ASList = append(ASList, importAS("AS2.json"))
 
+	// On assigne les ASN aux AS
 	for i := 0; i < len(ASList); i++ {
 		ASList[i].ASN = i
 	}
 
+	// On attribue les adresses IP parmi celles du range de Global.json
+	giveIP(ASList, ipRange)
+
 	global, ipRange, ASList = global, ipRange, ASList
 
-	// for _, AS := range ASList {
-
-	// 	// len(AS.routers)
-
-	// 	// for i := 0; i < len(AS.routersId); i++ {
-	// 	// 	for j := 0; j < i; j++ {
-	// 	// 		if AS.adj[i][j] == 1 {
-	// 	// 			// var in Interface = {"GigabitEthernet0/0", ip}
-	// 	// 			// AS.routers[i].interfaces = append(AS.routers[i].interfaces, )
-	// 	// 		}
-	// 	// 	}
-	// 	// }
-
+	// output := "salut"
+	// if err := os.WriteFile("output.ios", []byte(output), 0666); err != nil {
+	// 	log.Fatal(err)
 	// }
-
-	var ip IP
-	ip.toInt("2001:192:168:FF::24:2/64")
-	fmt.Println(ip.toString())
-
-	output := "salut"
-	if err := os.WriteFile("output.ios", []byte(output), 0666); err != nil {
-		log.Fatal(err)
-	}
 }
