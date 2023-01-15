@@ -4,14 +4,42 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
+    "os"
 	"strconv"
 	"strings"
 )
 
 type IP struct {
-	digits [8]int
+    digits [8]int // TODO: uint16
 	mask   int
+}
+
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+
+    return b
+}
+
+func (subnetwork IP) getRange() (IP, IP) {
+    mask := subnetwork.mask
+    lowIP := subnetwork
+    var highIP IP
+    var maskbits [8]uint16
+    for i := len(maskbits) - 1; i >= 0; i-- {
+        for j := 0; j < min(mask - 16 * (7 - i), 16); j++ {
+            maskbits[i] += (1 << j)
+        }
+    }
+
+    for i := 0; i < len(maskbits); i++ {
+        highIP.digits[i] = subnetwork.digits[i] | int(maskbits[i])
+    }
+
+    highIP.mask = mask
+
+    return lowIP, highIP
 }
 
 func (ip IP) toString() string {
