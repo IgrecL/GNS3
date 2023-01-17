@@ -61,6 +61,23 @@ func (ip IP) toString(withMask bool) string {
 	if withMask {
 		str += "/" + fmt.Sprint(ip.mask)
 	}
+
+    regexp, err := regexp.Compile(":(0:)+")
+    if err != nil {
+        fmt.Println(err)
+        return ""
+    }
+    
+    // Remplace 0:0:0:0 par :: (max 1 fois)
+    flag := false
+    str = regexp.ReplaceAllStringFunc(str, func(a string) string {
+        if flag {
+            return a
+        }
+        flag = true
+        return regexp.ReplaceAllString(a, "::")
+    })
+
 	return str
 }
 
@@ -159,9 +176,10 @@ func importGlobal(url string) ([]Link, [2]IP) {
 	}
 
 	// On récupère la pool d'IP
+    var subnet IP
+    subnet.toInt(linksMap["ip_range"].([]any)[0].(string))
 	var ipRange [2]IP
-	ipRange[0].toInt(linksMap["ip_range"].([]any)[0].(string))
-	ipRange[1].toInt(linksMap["ip_range"].([]any)[1].(string))
+    ipRange[0], ipRange[1] = subnet.getRange()
 
 	// On boucle dans la map pour extraire les valeurs et créer un []Link
 	var links []Link
@@ -381,7 +399,7 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	}
 
 	fmt.Println(err)
-	if err2 := os.WriteFile("i"+fmt.Sprint(routerId)+"_startup-config.cfg", []byte(input), 0666); err2 != nil {
+	if err2 := os.WriteFile("out/i"+fmt.Sprint(routerId)+"_startup-config.cfg", []byte(input), 0666); err2 != nil {
 		fmt.Println(err2)
 		return
 	}
@@ -390,6 +408,10 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 }
 
 func main() {
+
+    if _, err := os.Stat("out"); os.IsNotExist(err) {
+        os.Mkdir("out", 0666)
+    }
 
 	var wg sync.WaitGroup
 
