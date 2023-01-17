@@ -381,7 +381,7 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	}
 
 	fmt.Println(err)
-	if err2 := os.WriteFile(fmt.Sprint(index)+".cfg", []byte(input), 0666); err2 != nil {
+	if err2 := os.WriteFile("i"+fmt.Sprint(routerId)+"_startup-config.cfg", []byte(input), 0666); err2 != nil {
 		fmt.Println(err2)
 		return
 	}
@@ -409,15 +409,6 @@ func main() {
 	// On attribue les adresses IP parmi celles du range de Global.json
 	giveIP(ASList, global, ipRange)
 
-	// fmt.Println(ASList[0].adj[0])
-	// for _, a := range ASList[0].adj {
-	// 	for _, i := range a {
-	// 		if i != nil {
-	// 			fmt.Println(i[0].ip.toString(true))
-	// 		}
-	// 	}
-	// }
-
 	// On importe la template
 	templateByte, err := ioutil.ReadFile("template.cfg")
 	if err != nil {
@@ -435,7 +426,6 @@ func main() {
 	}
 	wg.Wait()
 	fmt.Println("Done.")
-	// mettre routeur id
 
 	global, ipRange, ASList = global, ipRange, ASList
 }
