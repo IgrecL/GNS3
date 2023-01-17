@@ -23,7 +23,7 @@ func min(a, b int) int {
 }
 
 func (subnetwork IP) getRange() (IP, IP) {
-    mask := subnetwork.mask
+    mask := 128 - subnetwork.mask
     lowIP := subnetwork
     var highIP IP
     var maskbits [8]uint16
@@ -37,7 +37,7 @@ func (subnetwork IP) getRange() (IP, IP) {
         highIP.digits[i] = subnetwork.digits[i] | int(maskbits[i])
     }
 
-    highIP.mask = mask
+    highIP.mask = subnetwork.mask
 
     return lowIP, highIP
 }
@@ -278,6 +278,12 @@ func main() {
 
 	// On attribue les adresses IP parmi celles du range de Global.json
 	giveIP(ASList, ipRange)
+
+    var ip IP
+    ip.toInt("2001::1/126")
+    _, highIP := ip.getRange()
+
+    fmt.Println(highIP.toString())
 
 	global, ipRange, ASList = global, ipRange, ASList
 
