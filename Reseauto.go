@@ -4,51 +4,63 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-    "os"
+	"io/ioutil"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type IP struct {
-    digits [8]int // TODO: uint16
+	digits [8]int // TODO: uint16
 	mask   int
 }
 
 func min(a, b int) int {
-    if a < b {
-        return a
-    }
+	if a < b {
+		return a
+	}
 
-    return b
+	return b
+}
+
+func toByte(b bool) byte {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func (subnetwork IP) getRange() (IP, IP) {
-    mask := 128 - subnetwork.mask
-    lowIP := subnetwork
-    var highIP IP
-    var maskbits [8]uint16
-    for i := len(maskbits) - 1; i >= 0; i-- {
-        for j := 0; j < min(mask - 16 * (7 - i), 16); j++ {
-            maskbits[i] += (1 << j)
-        }
-    }
+	mask := 128 - subnetwork.mask
+	lowIP := subnetwork
+	var highIP IP
+	var maskbits [8]uint16
+	for i := len(maskbits) - 1; i >= 0; i-- {
+		for j := 0; j < min(mask-16*(7-i), 16); j++ {
+			maskbits[i] += (1 << j)
+		}
+	}
 
-    for i := 0; i < len(maskbits); i++ {
-        highIP.digits[i] = subnetwork.digits[i] | int(maskbits[i])
-    }
+	for i := 0; i < len(maskbits); i++ {
+		highIP.digits[i] = subnetwork.digits[i] | int(maskbits[i])
+	}
 
-    highIP.mask = subnetwork.mask
+	highIP.mask = subnetwork.mask
 
-    return lowIP, highIP
+	return lowIP, highIP
 }
 
-func (ip IP) toString() string {
+func (ip IP) toString(withMask bool) string {
 	var str string
 	for i := 0; i < 8; i++ {
 		str += strconv.FormatInt(int64(ip.digits[i]), 16) + ":"
 	}
 	str = str[:len(str)-1]
-	str += "/" + fmt.Sprint(ip.mask)
+	if withMask {
+		str += "/" + fmt.Sprint(ip.mask)
+	}
 	return str
 }
 
@@ -111,7 +123,7 @@ func (ip1 IP) equals(ip2 IP) bool {
 type Interface struct {
 	name     string
 	ip       IP
-	idRouter int
+	routerId int
 	ASBR     bool
 }
 
@@ -157,7 +169,7 @@ func importGlobal(url string) ([]Link, [2]IP) {
 		var link Link
 		for i, value2 := range value.([]any) {
 			var in Interface
-			in.idRouter = int(value2.(map[string]any)["id"].(float64))
+			in.routerId = int(value2.(map[string]any)["id"].(float64))
 			in.name = value2.(map[string]any)["interface"].(string)
 			in.ASBR = true
 			link[i] = in
@@ -208,8 +220,8 @@ func importAS(url string) AS {
 
 		// On récupère les id et les noms d'interface
 		var int1, int2 Interface
-		int1.idRouter = int(value.([]any)[0].(map[string]any)["id"].(float64))
-		int2.idRouter = int(value.([]any)[1].(map[string]any)["id"].(float64))
+		int1.routerId = int(value.([]any)[0].(map[string]any)["id"].(float64))
+		int2.routerId = int(value.([]any)[1].(map[string]any)["id"].(float64))
 		int1.name = value.([]any)[0].(map[string]any)["interface"].(string)
 		int2.name = value.([]any)[1].(map[string]any)["interface"].(string)
 		var link Link
@@ -218,16 +230,17 @@ func importAS(url string) AS {
 		// On récupère l'indice du routeur dans la liste de routeurs
 		var index1, index2 int
 		for i, id := range as.routersId {
-			if id == int1.idRouter {
+			if id == int1.routerId {
 				index1 = i
 			}
-			if id == int2.idRouter {
+			if id == int2.routerId {
 				index2 = i
 			}
 		}
 
 		// On remplit la matrice d'adjacence de liens
 		as.adj[index1][index2] = &link
+		as.adj[index2][index1] = &link
 	}
 
 	return as
@@ -242,7 +255,7 @@ func printMat(M [][]int) {
 	}
 }
 
-func giveIP(ASList []AS, ipRange [2]IP) {
+func giveIP(ASList []AS, global []Link, ipRange [2]IP) {
 	ipMin, ipMax := ipRange[0], ipRange[1]
 	for _, AS := range ASList {
 		for i := 0; i < len(AS.routersId); i++ {
@@ -254,19 +267,133 @@ func giveIP(ASList []AS, ipRange [2]IP) {
 							return
 						}
 						(AS.adj[i][j])[k].ip = ipMin
-						fmt.Println((AS.adj[i][j])[k].ip.toString())
+						fmt.Println((AS.adj[i][j])[k].ip.toString(true))
 						ipMin = ipMin.increment()
 					}
 				}
 			}
 		}
 	}
+	for i := 0; i < len(global); i++ {
+		for k := 0; k < 2; k++ {
+			if ipMin.equals(ipMax.increment()) {
+				fmt.Println("L'IP maximale a été atteinte !")
+				return
+			}
+			(global[i])[k].ip = ipMin
+			fmt.Println((global[i])[k].ip.toString(true))
+			ipMin = ipMin.increment()
+		}
+	}
+}
+
+func regReplace(input, regex, text string) string {
+	regexp, err := regexp.Compile("{" + regex + "}")
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	return regexp.ReplaceAllString(input, text)
+}
+
+func generateOutput(ASList []AS, as AS, index int, global []Link, input string, wg *sync.WaitGroup) {
+	var err string
+	patterns := [9]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP"}
+	var replacements [9]string
+
+	routerId := as.routersId[index]
+
+	// On récupère la liste des liens eBGP qui concernent le route actuel
+	var eBGPNeighbors []Link
+	for _, l := range global {
+		if l[0].routerId == routerId || l[1].routerId == routerId {
+			eBGPNeighbors = append(eBGPNeighbors, l)
+		}
+	}
+
+	replacements[0] = "R" + fmt.Sprint(routerId)
+	replacements[1] = fmt.Sprint(routerId) + "::" + fmt.Sprint(routerId)
+	replacements[4] = fmt.Sprint(as.ASN)
+	replacements[5] = fmt.Sprint(routerId) + "." + fmt.Sprint(routerId) + "." + fmt.Sprint(routerId) + "." + fmt.Sprint(routerId)
+
+	// Portion de ligne qui spécifie le protocole utilisé en IGP
+	var stringIGP string
+	if as.IGP == "RIP" {
+		stringIGP = "ipv6 rip ripng enable"
+		replacements[8] = "ipv6 router rip ripng\n redistribute connected"
+		if len(eBGPNeighbors) != 0 {
+			replacements[7] = "  redistribute rip ripng\n"
+		}
+	} else if as.IGP == "OSPF" {
+		stringIGP = "ipv6 ospf 1 area 0"
+		replacements[8] = "ipv6 router ospf 1\n router-id " + replacements[5]
+		if len(eBGPNeighbors) != 0 {
+			replacements[7] = "  redistribute ospf 1\n"
+		}
+	} else {
+		err = "Un des protocoles indiqués n'est pas valide !"
+	}
+	replacements[2] = stringIGP
+
+	// On navigue la matrice d'adjacence pour récupérer les interfaces du routeur
+	for _, l := range as.adj[index] {
+		if l != nil {
+			nameId := toByte(l[0].routerId != routerId)
+			tmp := "interface {interface}\n no ip address\n speed auto\n duplex auto\n ipv6 address {address}\n ipv6 enable\n {IGP}\n!\n"
+			tmp = regReplace(tmp, "interface", l[nameId].name)
+			tmp = regReplace(tmp, "address", l[nameId].ip.toString(true))
+			replacements[3] += regReplace(tmp, "IGP", stringIGP)
+		}
+	}
+
+	for _, id := range as.routersId {
+		if id != routerId {
+			IP := fmt.Sprint(id) + "::" + fmt.Sprint(id)
+			replacements[6] += " neighbor " + IP + " remote-as " + fmt.Sprint(as.ASN) + "\n"
+			replacements[6] += " neighbor " + IP + " update-source Loopback0\n"
+			replacements[7] += "  neighbor " + IP + " activate\n"
+		}
+	}
+
+	for _, l := range eBGPNeighbors {
+		nameId := toByte(l[0].routerId != routerId)
+		tmp := "interface {interface}\n no ip address\n speed auto\n duplex auto\n ipv6 address {address}\n ipv6 enable\n!\n"
+		tmp = regReplace(tmp, "interface", l[nameId].name)
+		replacements[3] += regReplace(tmp, "address", l[nameId].ip.toString(true))
+	out:
+		for _, a := range ASList {
+			for _, r := range a.routersId {
+				if r == l[1-nameId].routerId {
+					replacements[6] += " neighbor " + fmt.Sprint(l[1-nameId].ip.toString(false)) + " remote-as " + fmt.Sprint(a.ASN) + "\n"
+					replacements[7] += "  neighbor " + fmt.Sprint(l[1-nameId].ip.toString(false)) + " activate\n"
+					break out
+				}
+			}
+		}
+	}
+
+	replacements[3] = strings.Trim(replacements[3], "\n")
+	replacements[6] = strings.Trim(replacements[6], "\n")
+	replacements[7] = strings.Trim(replacements[7], "\n")
+
+	for i, p := range patterns {
+		input = regReplace(input, p, replacements[i])
+	}
+
+	fmt.Println(err)
+	if err2 := os.WriteFile(fmt.Sprint(index)+".cfg", []byte(input), 0666); err2 != nil {
+		fmt.Println(err2)
+		return
+	}
+
+	wg.Done()
 }
 
 func main() {
 
-	// On importe le contenu des fichiers .json
-	global, ipRange := importGlobal("Global.json")
+	var wg sync.WaitGroup
+
+	// On importe le contenu des fichiers .json de AS
 	var ASList []AS
 	ASList = append(ASList, importAS("AS1.json"))
 	ASList = append(ASList, importAS("AS2.json"))
@@ -276,19 +403,39 @@ func main() {
 		ASList[i].ASN = i
 	}
 
+	// On import les liens eBGP des ASBR
+	global, ipRange := importGlobal("Global.json")
+
 	// On attribue les adresses IP parmi celles du range de Global.json
-	giveIP(ASList, ipRange)
+	giveIP(ASList, global, ipRange)
 
-    var ip IP
-    ip.toInt("2001::1/126")
-    _, highIP := ip.getRange()
+	// fmt.Println(ASList[0].adj[0])
+	// for _, a := range ASList[0].adj {
+	// 	for _, i := range a {
+	// 		if i != nil {
+	// 			fmt.Println(i[0].ip.toString(true))
+	// 		}
+	// 	}
+	// }
 
-    fmt.Println(highIP.toString())
+	// On importe la template
+	templateByte, err := ioutil.ReadFile("template.cfg")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	template := string(templateByte)
+
+	// On remplace les patterns du template
+	for i := range ASList {
+		for j := range ASList[i].routersId {
+			wg.Add(1)
+			go generateOutput(ASList, ASList[i], j, global, template, &wg)
+		}
+	}
+	wg.Wait()
+	fmt.Println("Done.")
+	// mettre routeur id
 
 	global, ipRange, ASList = global, ipRange, ASList
-
-	// output := "salut"
-	// if err := os.WriteFile("output.ios", []byte(output), 0666); err != nil {
-	// 	log.Fatal(err)
-	// }
 }
