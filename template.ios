@@ -1,0 +1,20 @@
+configure terminal
+    hostname {routerId}
+    ipv6 unicast-routing
+    interface Loopback 0
+        ipv6 enable
+        ipv6 address {loopbackAddress}/128
+        {IGP}
+        no shutdown
+        exit
+{interfaces}
+    router bgp {ASN}
+        no bgp default ipv4-unicast
+        bgp router-id {BGPRouterId}
+{neighbors}
+        address-family ipv6 unicast
+{neighborsActivate}
+            exit
+        exit
+    {redistributeIGP}
+        end

@@ -330,19 +330,19 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	var stringIGP string
 	if as.IGP == "RIP" {
 		stringIGP = "ipv6 rip ripng enable"
-		replacements[8] = "ipv6 router rip ripng\n redistribute connected"
+		replacements[8] = "ipv6 router rip ripng\n\t\tredistribute connected"
 		if len(eBGPNeighbors) != 0 {
-			replacements[7] = "  redistribute rip ripng\n"
+			replacements[7] = "\t\t\tredistribute rip ripng\n"
 		}
 	} else if as.IGP == "OSPF" {
 		stringIGP = "ipv6 ospf 1 area 0"
-		replacements[8] = "ipv6 router ospf 1\n router-id " + replacements[5]
+		replacements[8] = "ipv6 router ospf 1\n\t\trouter-id " + replacements[5]
 		if len(eBGPNeighbors) != 0 {
 			for _, neighbor := range eBGPNeighbors {
 				nameId := toByte(neighbor[0].routerId != routerId)
-				replacements[8] += "\n passive-interface " + neighbor[nameId].name
+				replacements[8] += "\n\t\tpassive-interface " + neighbor[nameId].name
 			}
-			replacements[7] = "  redistribute ospf 1\n"
+			replacements[7] = "\t\t\tredistribute ospf 1\n"
 		}
 	} else {
 		err = "Un des protocoles indiqués n'est pas valide !"
@@ -353,7 +353,7 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	for _, l := range as.adj[index] {
 		if l != nil {
 			nameId := toByte(l[0].routerId != routerId)
-			tmp := "interface {interface}\n no ip address\n speed auto\n duplex auto\n ipv6 address {address}\n ipv6 enable\n {IGP}\n!\n"
+			tmp := "\tinterface {interface}\n\t\tipv6 enable\n\t\tipv6 address {address}\n\t\t{IGP}\n\t\tno shutdown\n\t\texit\n"
 			tmp = regReplace(tmp, "interface", l[nameId].name)
 			tmp = regReplace(tmp, "address", l[nameId].ip.toString(true))
 			replacements[3] += regReplace(tmp, "IGP", stringIGP)
@@ -363,30 +363,28 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	for _, id := range as.routersId {
 		if id != routerId {
 			IP := fmt.Sprint(id) + "::" + fmt.Sprint(id)
-			replacements[6] += " neighbor " + IP + " remote-as " + fmt.Sprint(as.ASN) + "\n"
-			replacements[6] += " neighbor " + IP + " update-source Loopback0\n"
-			replacements[7] += "  neighbor " + IP + " activate\n"
+			replacements[6] += "\t\tneighbor " + IP + " remote-as " + fmt.Sprint(as.ASN) + "\n"
+			replacements[6] += "\t\tneighbor " + IP + " update-source Loopback0\n"
+			replacements[7] += "\t\t\tneighbor " + IP + " activate\n"
 		}
 	}
 
 	for _, l := range eBGPNeighbors {
 		nameId := toByte(l[0].routerId != routerId)
-		tmp := "interface {interface}\n no ip address\n speed auto\n duplex auto\n ipv6 address {address}\n ipv6 enable\n {IGP}\n"
+		tmp := "\tinterface {interface}\n\t\tipv6 enable\n\t\tipv6 address {address}\n\t\t{IGP}no shutdown\n\t\texit\n"
 		if as.IGP == "OSPF" {
-			tmp = regReplace(tmp, "IGP", stringIGP)
+			tmp = regReplace(tmp, "IGP", stringIGP+"\n\t\t")
 		} else {
 			tmp = regReplace(tmp, "IGP", "")
-			tmp = tmp[:len(tmp)-2]
 		}
-		tmp += "!\n"
 		tmp = regReplace(tmp, "interface", l[nameId].name)
 		replacements[3] += regReplace(tmp, "address", l[nameId].ip.toString(true))
 	out:
 		for _, a := range ASList {
 			for _, r := range a.routersId {
 				if r == l[1-nameId].routerId {
-					replacements[6] += " neighbor " + fmt.Sprint(l[1-nameId].ip.toString(false)) + " remote-as " + fmt.Sprint(a.ASN) + "\n"
-					replacements[7] += "  neighbor " + fmt.Sprint(l[1-nameId].ip.toString(false)) + " activate\n"
+					replacements[6] += "\t\tneighbor " + fmt.Sprint(l[1-nameId].ip.toString(false)) + " remote-as " + fmt.Sprint(a.ASN) + "\n"
+					replacements[7] += "\t\t\tneighbor " + fmt.Sprint(l[1-nameId].ip.toString(false)) + " activate\n"
 					break out
 				}
 			}
@@ -404,7 +402,7 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	if err != "" {
 		fmt.Println(err)
 	}
-	if err2 := os.WriteFile("out/i"+fmt.Sprint(routerId)+"_startup-config.cfg", []byte(input), 0666); err2 != nil {
+	if err2 := os.WriteFile("out/R"+fmt.Sprint(routerId)+".ios", []byte(input), 0666); err2 != nil {
 		fmt.Println(err2)
 		return
 	}
@@ -437,7 +435,7 @@ func main() {
 	giveIP(ASList, global, ipRange)
 
 	// On importe la template
-	templateByte, err := ioutil.ReadFile("template.cfg")
+	templateByte, err := ioutil.ReadFile("template.ios")
 	if err != nil {
 		fmt.Println(err)
 		return
