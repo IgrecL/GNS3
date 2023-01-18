@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	telnet "github.com/reiver/go-telnet"
 )
 
 type IP struct {
@@ -113,9 +115,7 @@ func (ip *IP) toInt(ipString string) {
 
 func (ip IP) increment() IP {
 	var new IP
-	for i, v := range ip.digits {
-		new.digits[i] = v
-	}
+	new.digits = ip.digits
 	new.mask = ip.mask
 	for i := 7; i >= 0; i-- {
 		if new.digits[i] == 65535 {
@@ -264,6 +264,38 @@ func importAS(url string) AS {
 	return as
 }
 
+func importAdmin(url string) []Interface {
+	// Importing .json files
+	file, _ := os.Open(url)
+	defer file.Close()
+
+	// Lecture du .json
+	data, err := io.ReadAll(file)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	// On caste le contenu en map de string
+	var interfacesMap map[string]interface{}
+	err = json.Unmarshal([]byte(data), &interfacesMap)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	// On boucle dans la map pour extraire les valeurs et créer un []Link
+	var adminInterfaces []Interface
+	for _, value := range interfacesMap["adminIP"].([]any) {
+		var in Interface
+		in.routerId = int(value.(map[string]any)["id"].(float64))
+		in.ip.toInt(value.(map[string]any)["ip"].(string))
+		adminInterfaces = append(adminInterfaces, in)
+	}
+
+	return adminInterfaces
+}
+
 func giveIP(ASList []AS, global []Link, ipRange [2]IP) {
 	ipMin, ipMax := ipRange[0], ipRange[1]
 	ipMin.mask = 127
@@ -402,10 +434,10 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	if err != "" {
 		fmt.Println(err)
 	}
-	if err2 := os.WriteFile("out/R"+fmt.Sprint(routerId)+".ios", []byte(input), 0666); err2 != nil {
-		fmt.Println(err2)
-		return
-	}
+	// if err2 := os.WriteFile("out/R"+fmt.Sprint(routerId)+".ios", []byte(input), 0666); err2 != nil {
+	// 	fmt.Println(err2)
+	// 	return
+	// }
 
 	wg.Done()
 }
@@ -431,6 +463,10 @@ func main() {
 	// On import les liens eBGP des ASBR
 	global, ipRange := importGlobal("Global.json")
 
+	// On importe les adresses administratives
+	adminInterfaces := importAdmin("Admin.json")
+	fmt.Println(adminInterfaces)
+
 	// On attribue les adresses IP parmi celles du range de Global.json
 	giveIP(ASList, global, ipRange)
 
@@ -451,4 +487,7 @@ func main() {
 	}
 	wg.Wait()
 	fmt.Println("Done.")
+
+	var caller telnet.Caller = telnet.StandardCaller
+	telnet.DialToAndCall("IP:port", caller)
 }
