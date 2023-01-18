@@ -1,4 +1,5 @@
 configure terminal
+    hostname R1
     ipv6 unicast-routing
     interface Loopback 0
         ipv6 enable
