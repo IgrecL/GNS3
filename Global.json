@@ -1,7 +1,7 @@
 {
-    "ip_range": ["2000::1/64"],
+    "ip_range": ["2000::0/64"],
     "links": [
-        [{"id": 6, "interface": "GigabitEthernet1/0"}, {"id": 8, "interface": "GigabitEthernet1/0"}],
-        [{"id": 7, "interface": "GigabitEthernet1/0"}, {"id": 9, "interface": "GigabitEthernet1/0"}]
+        [{"id": 6, "interface": "FastEthernet1/0"}, {"id": 8, "interface": "FastEthernet1/0"}],
+        [{"id": 7, "interface": "FastEthernet1/0"}, {"id": 9, "interface": "FastEthernet1/0"}]
     ]
 }

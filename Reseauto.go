@@ -62,21 +62,21 @@ func (ip IP) toString(withMask bool) string {
 		str += "/" + fmt.Sprint(ip.mask)
 	}
 
-    regexp, err := regexp.Compile(":(0:)+")
-    if err != nil {
-        fmt.Println(err)
-        return ""
-    }
-    
-    // Remplace 0:0:0:0 par :: (max 1 fois)
-    flag := false
-    str = regexp.ReplaceAllStringFunc(str, func(a string) string {
-        if flag {
-            return a
-        }
-        flag = true
-        return regexp.ReplaceAllString(a, "::")
-    })
+	regexp, err := regexp.Compile(":(0:)+")
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+
+	// Remplace 0:0:0:0 par :: (max 1 fois)
+	flag := false
+	str = regexp.ReplaceAllStringFunc(str, func(a string) string {
+		if flag {
+			return a
+		}
+		flag = true
+		return regexp.ReplaceAllString(a, "::")
+	})
 
 	return str
 }
@@ -176,10 +176,10 @@ func importGlobal(url string) ([]Link, [2]IP) {
 	}
 
 	// On récupère la pool d'IP
-    var subnet IP
-    subnet.toInt(linksMap["ip_range"].([]any)[0].(string))
+	var subnet IP
+	subnet.toInt(linksMap["ip_range"].([]any)[0].(string))
 	var ipRange [2]IP
-    ipRange[0], ipRange[1] = subnet.getRange()
+	ipRange[0], ipRange[1] = subnet.getRange()
 
 	// On boucle dans la map pour extraire les valeurs et créer un []Link
 	var links []Link
@@ -264,17 +264,9 @@ func importAS(url string) AS {
 	return as
 }
 
-func printMat(M [][]int) {
-	for _, v := range M {
-		for _, w := range v {
-			fmt.Print(w, " ")
-		}
-		fmt.Println()
-	}
-}
-
 func giveIP(ASList []AS, global []Link, ipRange [2]IP) {
 	ipMin, ipMax := ipRange[0], ipRange[1]
+	ipMin.mask = 127
 	for _, AS := range ASList {
 		for i := 0; i < len(AS.routersId); i++ {
 			for j := 0; j < i; j++ {
@@ -398,7 +390,9 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 		input = regReplace(input, p, replacements[i])
 	}
 
-	fmt.Println(err)
+	if err != "" {
+		fmt.Println(err)
+	}
 	if err2 := os.WriteFile("out/i"+fmt.Sprint(routerId)+"_startup-config.cfg", []byte(input), 0666); err2 != nil {
 		fmt.Println(err2)
 		return
@@ -409,9 +403,9 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 
 func main() {
 
-    if _, err := os.Stat("out"); os.IsNotExist(err) {
-        os.Mkdir("out", 0666)
-    }
+	if _, err := os.Stat("out"); os.IsNotExist(err) {
+		os.Mkdir("out", 0700)
+	}
 
 	var wg sync.WaitGroup
 
@@ -422,7 +416,7 @@ func main() {
 
 	// On assigne les ASN aux AS
 	for i := 0; i < len(ASList); i++ {
-		ASList[i].ASN = i
+		ASList[i].ASN = i + 1
 	}
 
 	// On import les liens eBGP des ASBR
