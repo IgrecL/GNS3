@@ -453,6 +453,4 @@ func main() {
 	}
 	wg.Wait()
 	fmt.Println("Done.")
-
-	global, ipRange, ASList = global, ipRange, ASList
 }
