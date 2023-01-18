@@ -338,6 +338,10 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 		stringIGP = "ipv6 ospf 1 area 0"
 		replacements[8] = "ipv6 router ospf 1\n router-id " + replacements[5]
 		if len(eBGPNeighbors) != 0 {
+			for _, neighbor := range eBGPNeighbors {
+				nameId := toByte(neighbor[0].routerId != routerId)
+				replacements[8] += "\n passive-interface " + neighbor[nameId].name
+			}
 			replacements[7] = "  redistribute ospf 1\n"
 		}
 	} else {
@@ -367,7 +371,14 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 
 	for _, l := range eBGPNeighbors {
 		nameId := toByte(l[0].routerId != routerId)
-		tmp := "interface {interface}\n no ip address\n speed auto\n duplex auto\n ipv6 address {address}\n ipv6 enable\n!\n"
+		tmp := "interface {interface}\n no ip address\n speed auto\n duplex auto\n ipv6 address {address}\n ipv6 enable\n {IGP}\n"
+		if as.IGP == "OSPF" {
+			tmp = regReplace(tmp, "IGP", stringIGP)
+		} else {
+			tmp = regReplace(tmp, "IGP", "")
+			tmp = tmp[:len(tmp)-2]
+		}
+		tmp += "!\n"
 		tmp = regReplace(tmp, "interface", l[nameId].name)
 		replacements[3] += regReplace(tmp, "address", l[nameId].ip.toString(true))
 	out:
