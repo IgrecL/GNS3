@@ -439,6 +439,12 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	// 	return
 	// }
 
+	telnetClient, telnetError := telnet.DialTo("localhost:500" + fmt.Sprint(routerId-1))
+	if telnetError != nil {
+		return
+	}
+	telnetClient.Write([]byte(input))
+
 	wg.Done()
 }
 
@@ -487,7 +493,4 @@ func main() {
 	}
 	wg.Wait()
 	fmt.Println("Done.")
-
-	var caller telnet.Caller = telnet.StandardCaller
-	telnet.DialToAndCall("IP:port", caller)
 }
