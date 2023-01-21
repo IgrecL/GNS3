@@ -264,7 +264,7 @@ func importAS(url string) AS {
 	return as
 }
 
-func importAdmin(url string) []Interface {
+func importAdmin(url string) []struct{int; string} {
 	// Importing .json files
 	file, _ := os.Open(url)
 	defer file.Close()
@@ -284,13 +284,12 @@ func importAdmin(url string) []Interface {
 		return nil
 	}
 
-	// On boucle dans la map pour extraire les valeurs et créer un []Link
-	var adminInterfaces []Interface
+	// On boucle dans la map pour extraire les strings
+	var adminInterfaces []struct{int; string}
 	for _, value := range interfacesMap["adminIP"].([]any) {
-		var in Interface
-		in.routerId = int(value.(map[string]any)["id"].(float64))
-		in.ip.toInt(value.(map[string]any)["ip"].(string))
-		adminInterfaces = append(adminInterfaces, in)
+        routerId := int(value.(map[string]any)["id"].(float64))
+        strIP := value.(map[string]any)["ip"].(string)
+        adminInterfaces = append(adminInterfaces, struct{int; string}{routerId, strIP})
 	}
 
 	return adminInterfaces
@@ -338,7 +337,7 @@ func regReplace(input, regex, text string) string {
 	return regexp.ReplaceAllString(input, text)
 }
 
-func generateOutput(ASList []AS, as AS, index int, global []Link, input string, wg *sync.WaitGroup) {
+func generateOutput(ASList []AS, as AS, index int, global []Link, telnetIPs []struct{int; string}, input string, wg *sync.WaitGroup) {
 	var err string
 	patterns := [9]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP"}
 	var replacements [9]string
@@ -439,8 +438,19 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	// 	return
 	// }
 
-    fmt.Println("Connecting to localhost:" + fmt.Sprint(5000 + routerId - 1))
-    telnetClient, telnetError := telnet.Dial("localhost:" + fmt.Sprint(5000 + routerId - 1))
+    // Logique a placer dans le main ?? mais du coup non parallelisee...
+    var telnetIP string
+    for _, v := range telnetIPs {
+        if v.int == routerId {
+            telnetIP = v.string
+        }
+    }
+    if telnetIP == "" {
+        return
+    }
+
+    fmt.Println("Connecting to", telnetIP)
+    telnetClient, telnetError := telnet.Dial(telnetIP)
 	if telnetError != nil {
         fmt.Println("Error occured when connecting to R" + fmt.Sprint(routerId))
 		return
@@ -473,9 +483,9 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 
 func main() {
 
-	if _, err := os.Stat("out"); os.IsNotExist(err) {
+	/*if _, err := os.Stat("out"); os.IsNotExist(err) {
 		os.Mkdir("out", 0700)
-	}
+	}*/
 
 	var wg sync.WaitGroup
 
@@ -511,7 +521,7 @@ func main() {
 	for i := range ASList {
 		for j := range ASList[i].routersId {
 			wg.Add(1)
-			go generateOutput(ASList, ASList[i], j, global, template, &wg)
+			go generateOutput(ASList, ASList[i], j, global, adminInterfaces, template, &wg)
 		}
 	}
 	wg.Wait()
