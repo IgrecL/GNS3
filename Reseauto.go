@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+    "time"
 
-	telnet "github.com/reiver/go-telnet"
-)
+	telnet "github.com/aprice/telnet")
 
 type IP struct {
 	digits [8]int // TODO: uint16
@@ -439,11 +439,34 @@ func generateOutput(ASList []AS, as AS, index int, global []Link, input string, 
 	// 	return
 	// }
 
-	telnetClient, telnetError := telnet.DialTo("localhost:500" + fmt.Sprint(routerId-1))
+    fmt.Println("Connecting to localhost:" + fmt.Sprint(5000 + routerId - 1))
+    telnetClient, telnetError := telnet.Dial("localhost:" + fmt.Sprint(5000 + routerId - 1))
 	if telnetError != nil {
+        fmt.Println("Error occured when connecting to R" + fmt.Sprint(routerId))
 		return
 	}
-	telnetClient.Write([]byte(input))
+    fmt.Println(" > Writing config... R" + fmt.Sprint(routerId))
+
+    regexp, _ := regexp.Compile("\n")
+
+    to_send := regexp.ReplaceAllString(input, "\r\n")
+    //fmt.Println(to_send)
+
+    var count int = 0
+    for _, b := range []byte(to_send) {
+        written, err2 := telnetClient.Write([]byte{b})
+        count += written
+        if err2 != nil {
+            fmt.Println("Error occured when writing R" + fmt.Sprint(routerId))
+        return
+        }
+
+        time.Sleep(10 * time.Millisecond)
+    }
+
+    fmt.Println(" > Finished R" + fmt.Sprint(routerId) + " " + fmt.Sprint(count) + "/" + fmt.Sprint(len([]byte(to_send))) + " bytes sent")
+
+    telnetClient.Close()
 
 	wg.Done()
 }

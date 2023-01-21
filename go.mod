@@ -2,6 +2,10 @@ module Reseauto
 
 go 1.19
 
-require github.com/reiver/go-telnet v0.0.0-20180421082511-9ff0b2ab096e
+require github.com/aprice/telnet v0.0.0-20171226235516-d54e7db45615
 
-require github.com/reiver/go-oi v1.0.0 // indirect
+require (
+	golang.org/x/crypto v0.5.0 // indirect
+	golang.org/x/sys v0.4.0 // indirect
+	golang.org/x/term v0.4.0 // indirect
+)
