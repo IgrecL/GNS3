@@ -15,10 +15,10 @@ func RegReplace(input, regex, text string) string {
 }
 
 func RegCarriage(input string) string {
-    regexp, err := regexp.Compile("\n")
-    if err != nil {
+	regexp, err := regexp.Compile("\n")
+	if err != nil {
 		fmt.Println(err)
 		return ""
 	}
-    return regexp.ReplaceAllString(input, "\r\n")
+	return regexp.ReplaceAllString(input, "\r\n")
 }

@@ -141,9 +141,9 @@ func ImportAdmin(url string) []struct{ID int; IP string} {
 	// On boucle dans la map pour extraire les strings
 	var adminInterfaces []struct{ID int; IP string}
 	for _, value := range interfacesMap["adminIP"].([]any) {
-        routerId := int(value.(map[string]any)["id"].(float64))
-        strIP := value.(map[string]any)["ip"].(string)
-        adminInterfaces = append(adminInterfaces, struct{ID int; IP string}{routerId, strIP})
+		routerId := int(value.(map[string]any)["id"].(float64))
+		strIP := value.(map[string]any)["ip"].(string)
+		adminInterfaces = append(adminInterfaces, struct{ID int; IP string}{routerId, strIP})
 	}
 
 	return adminInterfaces

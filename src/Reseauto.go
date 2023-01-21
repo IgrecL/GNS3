@@ -4,12 +4,13 @@ import (
 	"Reseauto/src/utils"
 	"fmt"
 	"io/ioutil"
-	//"os"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
-    "time"
+	"time"
 
-    telnet "github.com/aprice/telnet"
+	telnet "github.com/aprice/telnet"
 )
 
 func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
@@ -142,51 +143,53 @@ func generateOutput(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 		fmt.Println(err)
 	}
 	
-    /*if err2 := os.WriteFile("../out/R"+fmt.Sprint(routerId)+".ios", []byte(input), 0666); err2 != nil {
+	/*if err2 := os.WriteFile("../out/R"+fmt.Sprint(routerId)+".ios", []byte(input), 0666); err2 != nil {
 		fmt.Println(err2)
 		return
 	}*/
 
-    // Logique a placer dans le main ?? mais du coup non parallelisee...
-    var telnetIP string
-    for _, v := range telnetIPs {
-        if v.ID == routerId {
-            telnetIP = v.IP
-        }
-    }
-    if telnetIP == "" {
-        return
-    }
-
-    fmt.Println("Connecting to", telnetIP)
-    telnetClient, telnetError := telnet.Dial(telnetIP)
-	if telnetError != nil {
-        fmt.Println("Error occured when connecting to R" + fmt.Sprint(routerId))
+	// Logique a placer dans le main ?? mais du coup non parallelisee...
+	var telnetIP string
+	for _, v := range telnetIPs {
+		if v.ID == routerId {
+			telnetIP = v.IP
+		}
+	}
+	if telnetIP == "" {
 		return
 	}
-    fmt.Println(" > Writing config... R" + fmt.Sprint(routerId))
 
-    to_send := utils.RegCarriage(input)
-    //fmt.Println(to_send)
+	fmt.Println("Connecting to", telnetIP)
+	telnetClient, telnetError := telnet.Dial(telnetIP)
+	if telnetError != nil {
+		fmt.Println("Error occured when connecting to R" + fmt.Sprint(routerId))
+		return
+	}
+	fmt.Println(" > Writing config... R" + fmt.Sprint(routerId))
 
-    var count int = 0
-    for _, b := range []byte(to_send) {
-        written, err2 := telnetClient.Write([]byte{b})
-        count += written
-        if err2 != nil {
-            fmt.Println("Error occured when writing R" + fmt.Sprint(routerId))
-        return
-        }
+	to_send := utils.RegCarriage(input)
+	//fmt.Println(to_send)
 
-        time.Sleep(10 * time.Millisecond)
-    }
+	var count int = 0
+	for _, b := range []byte(to_send) {
+		written, err2 := telnetClient.Write([]byte{b})
+		count += written
+		if err2 != nil {
+			fmt.Println("Error occured when writing R" + fmt.Sprint(routerId))
+		return
+		}
 
-    fmt.Println(" > Finished R" + fmt.Sprint(routerId) + " " + fmt.Sprint(count) + "/" + fmt.Sprint(len([]byte(to_send))) + " bytes sent")
+		time.Sleep(time.Duration(telnetDelay) * time.Millisecond)
+	}
 
-    telnetClient.Close()
+	fmt.Println(" > Finished R" + fmt.Sprint(routerId) + " " + fmt.Sprint(count) + "/" + fmt.Sprint(len([]byte(to_send))) + " bytes sent")
+
+	telnetClient.Close()
 
 	wg.Done()
 }
+
+var telnetDelay int = 10
 
 func main() {
 
@@ -194,6 +197,14 @@ func main() {
 		os.Mkdir("../out", 0700)
 	}*/
 
+	telnetDelay, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		telnetDelay = 10
+		fmt.Println("You didn't specify a delay to use for telnet communication.\nDefault value is used:", telnetDelay, "ms")
+	} else {
+		fmt.Println("Delay for telnet communication set to:", telnetDelay, "ms")
+	}
+	
 	var wg sync.WaitGroup
 
 	// On importe le contenu des fichiers .json de AS
