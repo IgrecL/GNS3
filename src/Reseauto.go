@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-    "flag"
+	"flag"
 
 	telnet "github.com/aprice/telnet"
 )
@@ -109,9 +109,9 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 			pref := as.LocalPrefs[index][neighborIndex]
 			if pref != 0 {
 				replacements[7] += "  neighbor " + IP + " route-map LOCAL-PREF-" + IP + " in\n"
-                replacements[9] += "route-map LOCAL-PREF-"+ IP + " permit 10\n"
-                replacements[9] += " set local-preference "+ fmt.Sprint(pref) + "\n!\n"
-            }
+				replacements[9] += "route-map LOCAL-PREF-"+ IP + " permit 10\n"
+				replacements[9] += " set local-preference "+ fmt.Sprint(pref) + "\n!\n"
+			}
 		}
 	}
 
@@ -143,7 +143,7 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 							replacements[9] += fmt.Sprint(as.ASN) + " "
 						}
 						replacements[9] += "\n!\n"
-                    }
+					}
 					break out
 				}
 			}
@@ -338,79 +338,79 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 }
 
 func main() {
-    var wg sync.WaitGroup
+	var wg sync.WaitGroup
 
-    // On importe le contenu des fichiers .json de AS
-    var ASList []utils.AS
-    ASList = append(ASList, utils.ImportAS("./intent/AS1.json"))
-    ASList = append(ASList, utils.ImportAS("./intent/AS2.json"))
+	// On importe le contenu des fichiers .json de AS
+	var ASList []utils.AS
+	ASList = append(ASList, utils.ImportAS("./intent/AS1.json"))
+	ASList = append(ASList, utils.ImportAS("./intent/AS2.json"))
 
-    // On assigne les ASN aux AS
-    for i := 0; i < len(ASList); i++ {
-        ASList[i].ASN = i + 1
-    }
+	// On assigne les ASN aux AS
+	for i := 0; i < len(ASList); i++ {
+		ASList[i].ASN = i + 1
+	}
 
-    // On import les liens eBGP des ASBR
-    global, ipRange := utils.ImportGlobal("./intent/Global.json", ASList)
+	// On import les liens eBGP des ASBR
+	global, ipRange := utils.ImportGlobal("./intent/Global.json", ASList)
 
-    // On importe les adresses administratives
-    adminInterfaces := utils.ImportAdmin("./intent/Admin.json")
-    fmt.Println(adminInterfaces)
+	// On importe les adresses administratives
+	adminInterfaces := utils.ImportAdmin("./intent/Admin.json")
+	fmt.Println(adminInterfaces)
 
-    // On attribue les adresses IP parmi celles du range de Global.json
-    giveIP(ASList, global, ipRange)
+	// On attribue les adresses IP parmi celles du range de Global.json
+	giveIP(ASList, global, ipRange)
 
-    
+	
 
-    modePtr := flag.String("mode", "config", "Specify output mode: config | telnet")
-    delayPtr := flag.Int("delay", 10, "Specify telnet delay")
+	modePtr := flag.String("mode", "config", "Specify output mode: config | telnet")
+	delayPtr := flag.Int("delay", 10, "Specify telnet delay")
 
-    flag.Parse()
+	flag.Parse()
 
-    if *modePtr == "telnet" {
-        telnetDelay := *delayPtr
-        fmt.Println("Delay for telnet communication set to:", telnetDelay, "ms")
+	if *modePtr == "telnet" {
+		telnetDelay := *delayPtr
+		fmt.Println("Delay for telnet communication set to:", telnetDelay, "ms")
 
-        // On importe la template
-        templateByte, err := ioutil.ReadFile("./template/template.ios")
-        if err != nil {
-            fmt.Println(err)
-            return
-        }
+		// On importe la template
+		templateByte, err := ioutil.ReadFile("./template/template.ios")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-        template := string(templateByte)
+		template := string(templateByte)
 
-        // On remplace les patterns du template
-        for i := range ASList {
-            for j := range ASList[i].RoutersId {
-                wg.Add(1)
-                go generateTelnet(ASList, ASList[i], j, global, adminInterfaces, template, telnetDelay, &wg)
-            }
-        }
-    } else if *modePtr == "config" {
-        if _, err := os.Stat("../out"); os.IsNotExist(err) {
-            os.Mkdir("../out", 0700)
-        }
-        // On importe la template
-        templateByte, err := ioutil.ReadFile("./template/template.cfg")
-        if err != nil {
-            fmt.Println(err)
-            return
-        }
+		// On remplace les patterns du template
+		for i := range ASList {
+			for j := range ASList[i].RoutersId {
+				wg.Add(1)
+				go generateTelnet(ASList, ASList[i], j, global, adminInterfaces, template, telnetDelay, &wg)
+			}
+		}
+	} else if *modePtr == "config" {
+		if _, err := os.Stat("../out"); os.IsNotExist(err) {
+			os.Mkdir("../out", 0700)
+		}
+		// On importe la template
+		templateByte, err := ioutil.ReadFile("./template/template.cfg")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-        template := string(templateByte)
+		template := string(templateByte)
 
-        // On remplace les patterns du template
-        for i := range ASList {
-            for j := range ASList[i].RoutersId {
-                wg.Add(1)
-                go generateConfs(ASList, ASList[i], j, global, template, &wg)
-            }
-        }
-    } else {
-        fmt.Println("Error, the '-mode' flag can be set to either 'config' or 'telnet'")
-        return
-    }
+		// On remplace les patterns du template
+		for i := range ASList {
+			for j := range ASList[i].RoutersId {
+				wg.Add(1)
+				go generateConfs(ASList, ASList[i], j, global, template, &wg)
+			}
+		}
+	} else {
+		fmt.Println("Error, the '-mode' flag can be set to either 'config' or 'telnet'")
+		return
+	}
 
 	wg.Wait()
 	fmt.Println("Done.")
