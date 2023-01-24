@@ -46,7 +46,7 @@ func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
 	}
 }
 
-func generateOutput(ASList []utils.AS, as utils.AS, index int, global []utils.Link, telnetIPs []struct{ID int; IP string}, input string, wg *sync.WaitGroup) {
+func generateOutput(ASList []utils.AS, as utils.AS, index int, global []utils.Link, telnetIPs []struct{ID int; IP string}, input string, telnetDelay int, wg *sync.WaitGroup) {
 	var err string
 	patterns := [9]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP"}
 	var replacements [9]string
@@ -93,19 +93,32 @@ func generateOutput(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 	for _, l := range as.Adj[index] {
 		if l != nil {
 			nameId := utils.ToByte(l[0].RouterId != routerId)
-			tmp := "\tinterface {interface}\n\t\tipv6 enable\n\t\tipv6 address {address}\n\t\t{IGP}\n\t\tno shutdown\n\t\texit\n"
+			tmp := "\tinterface {interface}\n\t\tipv6 enable{OSPFCost}\n\t\tipv6 address {address}\n\t\t{IGP}\n\t\tno shutdown\n\t\texit\n"
 			tmp = utils.RegReplace(tmp, "interface", l[nameId].Name)
 			tmp = utils.RegReplace(tmp, "address", l[nameId].Ip.ToString(true))
+			cost := l[nameId].OSPFCost
+			if as.IGP == "OSPF" && cost != -1 {
+				tmp = utils.RegReplace(tmp, "OSPFCost", "\n\t\tipv6 ospf cost " + fmt.Sprint(cost))
+			} else {
+				tmp = utils.RegReplace(tmp, "OSPFCost", "")
+			}
 			replacements[3] += utils.RegReplace(tmp, "IGP", stringIGP)
 		}
 	}
 
-	for _, id := range as.RoutersId {
+	for neighborIndex, id := range as.RoutersId {
 		if id != routerId {
 			IP := fmt.Sprint(id) + "::" + fmt.Sprint(id)
 			replacements[6] += "\t\tneighbor " + IP + " remote-as " + fmt.Sprint(as.ASN) + "\n"
 			replacements[6] += "\t\tneighbor " + IP + " update-source Loopback0\n"
 			replacements[7] += "\t\t\tneighbor " + IP + " activate\n"
+			pref := as.LocalPrefs[index][neighborIndex]
+			if pref != 0 {
+				replacements[7] += "\t\t\tneighbor " + IP + " route-map LOCAL-PREF-" + IP + " in\n"
+				replacements[7] += "\t\t\troute-map LOCAL-PREF-" + IP + "\n"
+				replacements[7] += "\t\t\t\tset local-preference " + fmt.Sprint(pref) + "\n"
+				replacements[7] += "\t\t\t\texit\nrouter bgp " + replacements[4] + "\naddress-family ipv6 unicast\n"
+			}
 		}
 	}
 
@@ -120,11 +133,23 @@ func generateOutput(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 		tmp = utils.RegReplace(tmp, "interface", l[nameId].Name)
 		replacements[3] += utils.RegReplace(tmp, "address", l[nameId].Ip.ToString(true))
 	out:
-		for _, a := range ASList {
+		for i, a := range ASList {
 			for _, r := range a.RoutersId {
 				if r == l[1-nameId].RouterId {
-					replacements[6] += "\t\tneighbor " + fmt.Sprint(l[1-nameId].Ip.ToString(false)) + " remote-as " + fmt.Sprint(a.ASN) + "\n"
-					replacements[7] += "\t\t\tneighbor " + fmt.Sprint(l[1-nameId].Ip.ToString(false)) + " activate\n"
+					IP := fmt.Sprint(l[1-nameId].Ip.ToString(false))
+					replacements[6] += "\t\tneighbor " + IP + " remote-as " + fmt.Sprint(a.ASN) + "\n"
+					replacements[7] += "\t\t\tneighbor " + IP + " activate\n"
+					prepend := as.Prepends[i]
+					if prepend != 0 {
+						replacements[7] += "\t\t\tneighbor " + IP + " route-map PREPEND-" + IP + " out\n"
+						replacements[7] += "\t\t\troute-map PREPEND-" + IP + " permit 10\n"
+						replacements[7] += "\t\t\t\tset as-path prepend "
+						for x := 0; x < prepend; x++ {
+							replacements[7] += fmt.Sprint(as.ASN) + " "
+						}
+						replacements[7] += "\n"
+						replacements[7] += "\t\t\t\texit\nrouter bgp " + replacements[4] + "\naddress-family ipv6 unicast\n"
+					}
 					break out
 				}
 			}
@@ -189,28 +214,32 @@ func generateOutput(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 	wg.Done()
 }
 
-var telnetDelay int = 10
-
 func main() {
 
 	/*if _, err := os.Stat("../out"); os.IsNotExist(err) {
 		os.Mkdir("../out", 0700)
 	}*/
 
-	telnetDelay, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		telnetDelay = 10
-		fmt.Println("You didn't specify a delay to use for telnet communication.\nDefault value is used:", telnetDelay, "ms")
+	var telnetDelay int = 10
+	if len(os.Args) >= 2 {
+		var err error
+		telnetDelay, err = strconv.Atoi(os.Args[1])
+		if err != nil {
+			telnetDelay = 10
+			fmt.Println("You didn't specify a delay to use for telnet communication.\nDefault value is used:", telnetDelay, "ms")
+		} else {
+			fmt.Println("Delay for telnet communication set to:", telnetDelay, "ms")
+		}
 	} else {
-		fmt.Println("Delay for telnet communication set to:", telnetDelay, "ms")
+		fmt.Println("You didn't specify a delay to use for telnet communication.\nDefault value is used:", telnetDelay, "ms")
 	}
 	
 	var wg sync.WaitGroup
 
 	// On importe le contenu des fichiers .json de AS
 	var ASList []utils.AS
-	ASList = append(ASList, utils.ImportAS("../intent/AS1.json"))
-	ASList = append(ASList, utils.ImportAS("../intent/AS2.json"))
+	ASList = append(ASList, utils.ImportAS("./intent/AS1.json"))
+	ASList = append(ASList, utils.ImportAS("./intent/AS2.json"))
 
 	// On assigne les ASN aux AS
 	for i := 0; i < len(ASList); i++ {
@@ -218,17 +247,17 @@ func main() {
 	}
 
 	// On import les liens eBGP des ASBR
-	global, ipRange := utils.ImportGlobal("../intent/Global.json")
+	global, ipRange := utils.ImportGlobal("./intent/Global.json", ASList)
 
 	// On importe les adresses administratives
-	adminInterfaces := utils.ImportAdmin("../intent/Admin.json")
+	adminInterfaces := utils.ImportAdmin("./intent/Admin.json")
 	fmt.Println(adminInterfaces)
 
 	// On attribue les adresses IP parmi celles du range de Global.json
 	giveIP(ASList, global, ipRange)
 
 	// On importe la template
-	templateByte, err := ioutil.ReadFile("../template/template.ios")
+	templateByte, err := ioutil.ReadFile("./template/template.ios")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -239,7 +268,7 @@ func main() {
 	for i := range ASList {
 		for j := range ASList[i].RoutersId {
 			wg.Add(1)
-			go generateOutput(ASList, ASList[i], j, global, adminInterfaces, template, &wg)
+			go generateOutput(ASList, ASList[i], j, global, adminInterfaces, template, telnetDelay, &wg)
 		}
 	}
 	wg.Wait()

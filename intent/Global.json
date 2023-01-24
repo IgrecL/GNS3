@@ -3,5 +3,8 @@
     "links": [
         [{"id": 6, "interface": "FastEthernet1/0"}, {"id": 8, "interface": "FastEthernet1/0"}],
         [{"id": 7, "interface": "FastEthernet1/0"}, {"id": 9, "interface": "FastEthernet1/0"}]
+    ],
+    "as_prepends": [
+        {"from": 1, "to": 2, "times": 5}
     ]
 }

@@ -120,13 +120,16 @@ type Interface struct {
 	Ip       IP
 	RouterId int
 	ASBR     bool
+	OSPFCost int
 }
 
 type Link [2]Interface
 
 type AS struct {
-	ASN       int
-	IGP       string
-	RoutersId []int
-	Adj       [][]*Link
+	ASN        int
+	IGP        string
+	RoutersId  []int
+	Adj        [][]*Link
+	LocalPrefs [][]int
+	Prepends   []int
 }
