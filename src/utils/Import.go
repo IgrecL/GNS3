@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func ImportGlobal(url string, ASList []AS) ([]Link, [2]IP) {
+func ImportGlobal(url string, ASList []AS) ([]Link, [][2]int, [2]IP) {
 	// Importing .json files
 	file, _ := os.Open(url)
 	defer file.Close()
@@ -17,7 +17,7 @@ func ImportGlobal(url string, ASList []AS) ([]Link, [2]IP) {
 	if err != nil {
 		fmt.Println(err)
 		var nilArray [2]IP
-		return nil, nilArray
+		return nil, nil, nilArray
 	}
 
 	// On caste le contenu en map de string
@@ -26,7 +26,7 @@ func ImportGlobal(url string, ASList []AS) ([]Link, [2]IP) {
 	if err != nil {
 		fmt.Println(err)
 		var nilArray [2]IP
-		return nil, nilArray
+		return nil, nil, nilArray
 	}
 
 	// On récupère la pool d'IP
@@ -75,7 +75,23 @@ func ImportGlobal(url string, ASList []AS) ([]Link, [2]IP) {
 
 	}
 
-	return links, ipRange
+    meds := make([][2]int, len(links))
+
+    for _, value := range linksMap["MED"].([]any) {
+		id1 := int(value.(map[string]any)["id1"].(float64))
+		id2 := int(value.(map[string]any)["id2"].(float64))
+		med := int(value.(map[string]any)["value"].(float64))
+        
+        for index, r := range links {
+            if r[0].RouterId == id1 && r[1].RouterId == id2 {
+                meds[index][0] = med
+            } else if r[1].RouterId == id1 && r[0].RouterId == id2 {
+                meds[index][1] = med
+            }
+        }
+	}
+
+	return links, meds, ipRange
 }
 
 func ImportAS(url string) AS {

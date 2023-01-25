@@ -46,7 +46,7 @@ func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
 	}
 }
 
-func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Link, input string, wg *sync.WaitGroup) {
+func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Link, meds [][2]int, input string, wg *sync.WaitGroup) {
 	var err string
 	patterns := [10]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "routeMaps"}
 	var replacements [10]string
@@ -60,6 +60,32 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 			eBGPNeighbors = append(eBGPNeighbors, l)
 		}
 	}
+
+    routeMaps := make(map[utils.IP]([]string))
+
+    type MedReplacement struct {
+        ip utils.IP
+        med int
+    }
+    var medsReplacements []MedReplacement
+    for i, l := range global {
+        if l[0].RouterId == routerId {
+            medReplacement := MedReplacement{ip: l[1].Ip, med: meds[i][0]}
+            medsReplacements = append(medsReplacements, medReplacement)
+        } else if l[1].RouterId == routerId {
+            medReplacement := MedReplacement{ip: l[0].Ip, med: meds[i][1]}
+            medsReplacements = append(medsReplacements, medReplacement)
+        }
+    }
+
+    for _, m := range medsReplacements {
+        entries, ok := routeMaps[m.ip]
+        if ok {
+            entries = append(entries, " set metric " + fmt.Sprint(m.med) + "\n")
+        } else {
+            routeMaps[m.ip] = []string{" set metric " + fmt.Sprint(m.med) + "\n"}
+        }
+    }
 
 	replacements[0] = "R" + fmt.Sprint(routerId)
 	replacements[1] = fmt.Sprint(routerId) + "::" + fmt.Sprint(routerId)
@@ -136,13 +162,17 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 					replacements[7] += "  neighbor " + IP + " activate\n"
 					prepend := as.Prepends[i]
 					if prepend != 0 {
-						replacements[7] += "  neighbor " + IP + " route-map PREPEND-" + IP + " out\n"
-						replacements[9] += "route-map PREPEND-" + IP + " permit 10\n"
-						replacements[9] += " set as-path prepend "
-						for x := 0; x < prepend; x++ {
-							replacements[9] += fmt.Sprint(as.ASN) + " "
-						}
-						replacements[9] += "\n!\n"
+                        entry := " set as-path prepend "
+                        for x := 0; x < prepend; x++ {
+                            entry += fmt.Sprint(as.ASN) + " "   
+                        }
+                        entry += "\n"
+                        entries, ok := routeMaps[l[1-nameId].Ip]
+                        if ok {
+                            routeMaps[l[1-nameId].Ip] = append(entries, entry)
+                        } else {
+                            routeMaps[l[1-nameId].Ip] = []string{entry}
+                        }
 					}
 					break out
 				}
@@ -150,6 +180,17 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 		}
 	}
 
+    for k, v := range routeMaps {
+        IP := k.ToString(false)
+        replacements[7] += "  neighbor " + IP + " route-map MAP-" + IP + " out\n"
+        replacements[9] += "route-map MAP-" + IP + " permit 10\n"
+        for _, s := range v {
+            replacements[9] += s
+        }
+        replacements[9] += "!\n"
+    }
+
+    
 	replacements[3] = strings.Trim(replacements[3], "\n")
 	replacements[6] = strings.Trim(replacements[6], "\n")
 	replacements[7] = strings.Trim(replacements[7], "\n")
@@ -169,7 +210,7 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 	wg.Done()
 }
 
-func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Link, telnetIPs []struct{ID int; IP string}, input string, telnetDelay int, wg *sync.WaitGroup) {
+func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Link, meds [][2]int, telnetIPs []struct{ID int; IP string}, input string, telnetDelay int, wg *sync.WaitGroup) {
 	var err string
 	patterns := [9]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP"}
 	var replacements [9]string
@@ -183,6 +224,32 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 			eBGPNeighbors = append(eBGPNeighbors, l)
 		}
 	}
+
+    routeMaps := make(map[utils.IP]([]string))
+
+    type MedReplacement struct {
+        ip utils.IP
+        med int
+    }
+    var medsReplacements []MedReplacement
+    for i, l := range global {
+        if l[0].RouterId == routerId {
+            medReplacement := MedReplacement{ip: l[1].Ip, med: meds[i][0]}
+            medsReplacements = append(medsReplacements, medReplacement)
+        } else if l[1].RouterId == routerId {
+            medReplacement := MedReplacement{ip: l[0].Ip, med: meds[i][1]}
+            medsReplacements = append(medsReplacements, medReplacement)
+        }
+    }
+
+    for _, m := range medsReplacements {
+        entries, ok := routeMaps[m.ip]
+        if ok {
+            entries = append(entries, " set metric " + fmt.Sprint(m.med) + "\n")
+        } else {
+            routeMaps[m.ip] = []string{" set metric " + fmt.Sprint(m.med) + "\n"}
+        }
+    }
 
 	replacements[0] = "R" + fmt.Sprint(routerId)
 	replacements[1] = fmt.Sprint(routerId) + "::" + fmt.Sprint(routerId)
@@ -259,26 +326,40 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 		for i, a := range ASList {
 			for _, r := range a.RoutersId {
 				if r == l[1-nameId].RouterId {
-					IP := fmt.Sprint(l[1-nameId].Ip.ToString(false))
+					IP := l[1-nameId].Ip.ToString(false)
 					replacements[6] += "\t\tneighbor " + IP + " remote-as " + fmt.Sprint(a.ASN) + "\n"
 					replacements[7] += "\t\t\tneighbor " + IP + " activate\n"
 					prepend := as.Prepends[i]
-					if prepend != 0 {
-						replacements[7] += "\t\t\tneighbor " + IP + " route-map PREPEND-" + IP + " out\n"
-						replacements[7] += "\t\t\troute-map PREPEND-" + IP + " permit 10\n"
-						replacements[7] += "\t\t\t\tset as-path prepend "
-						for x := 0; x < prepend; x++ {
-							replacements[7] += fmt.Sprint(as.ASN) + " "
-						}
-						replacements[7] += "\n"
-						replacements[7] += "\t\t\t\texit\nrouter bgp " + replacements[4] + "\naddress-family ipv6 unicast\n"
-					}
-					break out
-				}
+                    if prepend != 0 {
+                        entry := "\t\t\t\tset as-path prepend "
+                        for x := 0; x < prepend; x++ {
+                            entry += fmt.Sprint(as.ASN) + " "   
+                        }
+                        entry += "\n"
+                        entries, ok := routeMaps[l[1-nameId].Ip]
+                        if ok {
+                            routeMaps[l[1-nameId].Ip] = append(entries, entry)
+                        } else {
+                            routeMaps[l[1-nameId].Ip] = []string{entry}
+                        }
+                    }
+                    break out
+                }
 			}
 		}
 	}
 
+    for k, v := range routeMaps {
+        IP := k.ToString(false)
+        replacements[7] += "\t\t\tneighbor " + IP + " route-map MAP-" + IP + " out\n"
+        replacements[7] += "\t\t\t\troute-map MAP-" + IP + " permit 10\n"
+        for _, s := range v {
+            replacements[7] += s
+        }
+        replacements[7] += "\t\t\t\texit\nrouter bgp " + replacements[4] + "\naddress-family ipv6 unicast\n"
+    }
+
+    
 	replacements[3] = strings.Trim(replacements[3], "\n")
 	replacements[6] = strings.Trim(replacements[6], "\n")
 	replacements[7] = strings.Trim(replacements[7], "\n")
@@ -351,7 +432,11 @@ func main() {
 	}
 
 	// On import les liens eBGP des ASBR
-	global, ipRange := utils.ImportGlobal("./intent/Global.json", ASList)
+	global, meds, ipRange := utils.ImportGlobal("./intent/Global.json", ASList)
+
+    fmt.Println("==========")
+    fmt.Println(meds)
+    fmt.Println("==========")
 
 	// On importe les adresses administratives
 	adminInterfaces := utils.ImportAdmin("./intent/Admin.json")
@@ -384,7 +469,7 @@ func main() {
 		for i := range ASList {
 			for j := range ASList[i].RoutersId {
 				wg.Add(1)
-				go generateTelnet(ASList, ASList[i], j, global, adminInterfaces, template, telnetDelay, &wg)
+				go generateTelnet(ASList, ASList[i], j, global, meds, adminInterfaces, template, telnetDelay, &wg)
 			}
 		}
 	} else if *modePtr == "config" {
@@ -404,7 +489,7 @@ func main() {
 		for i := range ASList {
 			for j := range ASList[i].RoutersId {
 				wg.Add(1)
-				go generateConfs(ASList, ASList[i], j, global, template, &wg)
+				go generateConfs(ASList, ASList[i], j, global, meds, template, &wg)
 			}
 		}
 	} else {
