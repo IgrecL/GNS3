@@ -13,3 +13,7 @@ func ToByte(b bool) byte {
 	}
 	return 0
 }
+
+func ToBool(i int) bool {
+    return i != 0
+}

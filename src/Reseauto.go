@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 	"flag"
+    "math"
 
 	telnet "github.com/aprice/telnet"
 )
@@ -16,7 +17,11 @@ import (
 func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
 	ipMin, ipMax := ipRange[0], ipRange[1]
 	ipMin.Mask = 127
+
 	for _, AS := range ASList {
+        var addressed = 0
+        var ipMinInAS, ipMaxInAS utils.IP
+        ipMinInAS = ipMin
 		for i := 0; i < len(AS.RoutersId); i++ {
 			for j := 0; j < i; j++ {
 				if AS.Adj[i][j] != nil {
@@ -26,12 +31,21 @@ func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
 							return
 						}
 						(AS.Adj[i][j])[k].Ip = ipMin
+                        ipMaxInAS = ipMin
+                        addressed++
 						fmt.Println((AS.Adj[i][j])[k].Ip.ToString(true))
 						ipMin = ipMin.Increment()
 					}
 				}
 			}
 		}
+
+        minimalMaskForAS := float64(utils.MaskForIPRange(ipMinInAS, ipMaxInAS).Mask)
+        fmt.Println("/" + fmt.Sprint(minimalMaskForAS))
+        rest := int(math.Pow(2, 128 - minimalMaskForAS)) - addressed
+        for i := 0; i < rest; i++ {
+            ipMin = ipMin.Increment()
+        }
 	}
 	for i := 0; i < len(global); i++ {
 		for k := 0; k < 2; k++ {
@@ -48,8 +62,8 @@ func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
 
 func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Link, meds [][2]int, input string, wg *sync.WaitGroup) {
 	var err string
-	patterns := [10]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "routeMaps"}
-	var replacements [10]string
+	patterns := [11]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "routeMaps", "aggregate"}
+	var replacements [11]string
 
 	routerId := as.RoutersId[index]
 
@@ -180,6 +194,28 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 		}
 	}
 
+    minIP, maxIP := utils.MaxIP(), utils.MinIP()
+    for _, iv := range as.Adj {
+        for _, l := range iv {
+            if l != nil {
+                for _, interfac := range l {
+                    if interfac.Ip.GreaterThan(maxIP) {
+                        maxIP = interfac.Ip
+                    }
+
+                    if interfac.Ip.LessThan(minIP) {
+                        minIP = interfac.Ip
+                    }
+                }
+            }
+        }
+    }
+
+    aggregNet := utils.MaskForIPRange(minIP, maxIP)
+    if len(eBGPNeighbors) != 0 {
+        replacements[10] = " aggregate-address " + aggregNet.ToString(true) + " summary-only"
+    }
+
     for k, v := range routeMaps {
         IP := k.ToString(false)
         replacements[7] += "  neighbor " + IP + " route-map MAP-" + IP + " out\n"
@@ -190,7 +226,6 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
         replacements[9] += "!\n"
     }
 
-    
 	replacements[3] = strings.Trim(replacements[3], "\n")
 	replacements[6] = strings.Trim(replacements[6], "\n")
 	replacements[7] = strings.Trim(replacements[7], "\n")
@@ -212,8 +247,8 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 
 func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Link, meds [][2]int, telnetIPs []struct{ID int; IP string}, input string, telnetDelay int, wg *sync.WaitGroup) {
 	var err string
-	patterns := [9]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP"}
-	var replacements [9]string
+	patterns := [10]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "aggregate"}
+	var replacements [10]string
 
 	routerId := as.RoutersId[index]
 
@@ -348,6 +383,28 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 			}
 		}
 	}
+
+    minIP, maxIP := utils.MaxIP(), utils.MinIP()
+    for _, iv := range as.Adj {
+        for _, l := range iv {
+            if l != nil {
+                for _, interfac := range l {
+                    if interfac.Ip.GreaterThan(maxIP) {
+                        maxIP = interfac.Ip
+                    }
+
+                    if interfac.Ip.LessThan(minIP) {
+                        minIP = interfac.Ip
+                    }
+                }
+            }
+        }
+    }
+
+    aggregNet := utils.MaskForIPRange(minIP, maxIP)
+    if len(eBGPNeighbors) != 0 {
+        replacements[9] = "\t\taggregate-address " + aggregNet.ToString(true) + " summary-only"
+    }
 
     for k, v := range routeMaps {
         IP := k.ToString(false)

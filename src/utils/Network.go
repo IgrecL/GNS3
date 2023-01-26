@@ -115,6 +115,69 @@ func (ip1 IP) Equals(ip2 IP) bool {
 	return true
 }
 
+func (ip1 IP) GreaterThan(ip2 IP) bool {
+    for i := 0; i < 8; i++ {
+        if ip1.Digits[i] > ip2.Digits[i] {
+            return true
+        } else if ip1.Digits[i] < ip2.Digits[i] {
+            return false
+        }
+    }
+    
+    return true
+}
+
+func (ip1 IP) LessThan(ip2 IP) bool {
+    for i := 0; i < 8; i++ {
+        if ip1.Digits[i] < ip2.Digits[i] {
+            return true
+        } else if ip1.Digits[i] > ip2.Digits[i] {
+            return false
+        }
+    }
+    
+    return false
+}
+
+func MaxIP() IP {
+    var ip IP
+    for i := 0; i < 8; i++ {
+        ip.Digits[i] = 0xFFFF
+    }
+    return ip
+}
+
+func MinIP() IP {
+    var ip IP
+    for i := 0; i < 8; i++ {
+        ip.Digits[i] = 0x0000
+    }
+    return ip
+}
+
+func MaskForIPRange(minIP IP, maxIP IP) IP {
+    var ip IP
+    ip.Digits = minIP.Digits
+    var maskbits [8]uint16
+	for i := 0; i < len(maskbits); i++ {
+        if minIP.Digits[i] == maxIP.Digits[i] {
+            maskbits[i] = 0xFFFF
+        } else {
+            for j := 15; j >= 0; j-- {
+                //var different bool
+                if ToBool(((minIP.Digits[i] & (0xFFFF << j)) ^ (maxIP.Digits[i] & (0xFFFF << j))) >> j & 0x1) {
+                    ip.Mask = i * 16 + (16 - j - 1)
+                    return ip
+                } else {
+                    maskbits[i] |= (1 << j)
+                }
+            }
+        }
+	}
+
+    return ip
+}
+
 type Interface struct {
 	Name     string
 	Ip       IP
