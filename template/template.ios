@@ -1,6 +1,7 @@
 configure terminal
     hostname {routerId}
     ipv6 unicast-routing
+    {blackholeRoute}
     interface Loopback 0
         ipv6 enable
         ipv6 address {loopbackAddress}/128

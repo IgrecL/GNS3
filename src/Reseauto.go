@@ -62,8 +62,8 @@ func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
 
 func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Link, meds [][2]int, input string, wg *sync.WaitGroup) {
 	var err string
-	patterns := [11]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "routeMaps", "aggregate"}
-	var replacements [11]string
+	patterns := [12]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "routeMaps", "aggregate", "blackholeRoute"}
+	var replacements [12]string
 
 	routerId := as.RoutersId[index]
 
@@ -111,9 +111,6 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 	if as.IGP == "RIP" {
 		stringIGP = "ipv6 rip ripng enable"
 		replacements[8] = "ipv6 router rip ripng\n redistribute connected"
-		if len(eBGPNeighbors) != 0 {
-			replacements[7] = "  redistribute rip ripng\n"
-		}
 	} else if as.IGP == "OSPF" {
 		stringIGP = "ipv6 ospf 1 area 0"
 		replacements[8] = "ipv6 router ospf 1\n router-id " + replacements[5]
@@ -122,7 +119,6 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 				nameId := utils.ToByte(neighbor[0].RouterId != routerId)
 				replacements[8] += "\n passive-interface " + neighbor[nameId].Name
 			}
-			replacements[7] = "  redistribute ospf 1\n"
 		}
 	} else {
 		err = "Un des protocoles indiqués n'est pas valide !"
@@ -213,7 +209,8 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 
     aggregNet := utils.MaskForIPRange(minIP, maxIP)
     if len(eBGPNeighbors) != 0 {
-        replacements[10] = " aggregate-address " + aggregNet.ToString(true) + " summary-only"
+        replacements[10]  = "  network " + aggregNet.ToString(true) + "\n"
+        replacements[11]  = "ipv6 route " + aggregNet.ToString(true) + " null0"
     }
 
     for k, v := range routeMaps {
@@ -247,8 +244,8 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 
 func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Link, meds [][2]int, telnetIPs []struct{ID int; IP string}, input string, telnetDelay int, wg *sync.WaitGroup) {
 	var err string
-	patterns := [10]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "aggregate"}
-	var replacements [10]string
+	patterns := [11]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "aggregate", "blackholeRoute"}
+	var replacements [11]string
 
 	routerId := as.RoutersId[index]
 
@@ -296,9 +293,6 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 	if as.IGP == "RIP" {
 		stringIGP = "ipv6 rip ripng enable"
 		replacements[8] = "ipv6 router rip ripng\n\t\tredistribute connected"
-		if len(eBGPNeighbors) != 0 {
-			replacements[7] = "\t\t\tredistribute rip ripng\n"
-		}
 	} else if as.IGP == "OSPF" {
 		stringIGP = "ipv6 ospf 1 area 0"
 		replacements[8] = "ipv6 router ospf 1\n\t\trouter-id " + replacements[5]
@@ -307,7 +301,6 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 				nameId := utils.ToByte(neighbor[0].RouterId != routerId)
 				replacements[8] += "\n\t\tpassive-interface " + neighbor[nameId].Name
 			}
-			replacements[7] = "\t\t\tredistribute ospf 1\n"
 		}
 	} else {
 		err = "Un des protocoles indiqués n'est pas valide !"
@@ -403,7 +396,8 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 
     aggregNet := utils.MaskForIPRange(minIP, maxIP)
     if len(eBGPNeighbors) != 0 {
-        replacements[9] = "\t\taggregate-address " + aggregNet.ToString(true) + " summary-only"
+        replacements[9]  = "\t\tnetwork " + aggregNet.ToString(true)
+        replacements[10]  = "ipv6 route " + aggregNet.ToString(true) + " null0"
     }
 
     for k, v := range routeMaps {
