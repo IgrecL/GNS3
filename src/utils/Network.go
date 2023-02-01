@@ -189,10 +189,11 @@ type Interface struct {
 type Link [2]Interface
 
 type AS struct {
-	ASN        int
-	IGP        string
-	RoutersId  []int
-	Adj        [][]*Link
-	LocalPrefs [][]int
-	Prepends   []int
+	ASN         int
+	IGP         string
+	RoutersId   []int
+	Adj         [][]*Link
+	LocalPrefs  [][]int
+	Prepends    []int
+    Communities []string
 }

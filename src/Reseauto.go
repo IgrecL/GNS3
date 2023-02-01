@@ -62,8 +62,8 @@ func giveIP(ASList []utils.AS, global []utils.Link, ipRange [2]utils.IP) {
 
 func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Link, meds [][2]int, input string, wg *sync.WaitGroup) {
 	var err string
-	patterns := [12]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "routeMaps", "aggregate", "blackholeRoute"}
-	var replacements [12]string
+	patterns := [13]string{"routerId", "loopbackAddress", "IGP", "interfaces", "ASN", "BGPRouterId", "neighbors", "neighborsActivate", "redistributeIGP", "routeMaps", "aggregate", "blackholeRoute", "communities"}
+	var replacements [13]string
 
 	routerId := as.RoutersId[index]
 
@@ -75,7 +75,8 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 		}
 	}
 
-    routeMaps := make(map[utils.IP]([]string))
+    routeMapsOut := make(map[utils.IP]([]string))
+    routeMapsIn := make(map[utils.IP]([]string))
 
     type MedReplacement struct {
         ip utils.IP
@@ -93,11 +94,11 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
     }
 
     for _, m := range medsReplacements {
-        entries, ok := routeMaps[m.ip]
+        entries, ok := routeMapsOut[m.ip]
         if ok {
             entries = append(entries, " set metric " + fmt.Sprint(m.med) + "\n")
         } else {
-            routeMaps[m.ip] = []string{" set metric " + fmt.Sprint(m.med) + "\n"}
+            routeMapsOut[m.ip] = []string{" set metric " + fmt.Sprint(m.med) + "\n"}
         }
     }
 
@@ -142,13 +143,20 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
 			replacements[6] += " neighbor " + IP + " remote-as " + fmt.Sprint(as.ASN) + "\n"
 			replacements[6] += " neighbor " + IP + " update-source Loopback0\n"
 			replacements[7] += "  neighbor " + IP + " activate\n"
+			replacements[7] += "  neighbor " + IP + " send-community\n"
 			pref := as.LocalPrefs[index][neighborIndex]
 			if pref != 0 {
-				replacements[7] += "  neighbor " + IP + " route-map LOCAL-PREF-" + IP + " in\n"
-				replacements[9] += "route-map LOCAL-PREF-"+ IP + " permit 10\n"
-				replacements[9] += " set local-preference "+ fmt.Sprint(pref) + "\n!\n"
-			}
-		}
+                var ip utils.IP
+                ip.ToInt(IP + "/0")
+                entry := " set local-preference "+ fmt.Sprint(pref) + "\n"
+                entries, ok := routeMapsIn[ip]
+                if ok {
+                    routeMapsIn[ip] = append(entries, entry)
+                } else {
+                    routeMapsIn[ip] = []string{entry}
+                }
+            }
+        }
 	}
 
 	for _, l := range eBGPNeighbors {
@@ -177,15 +185,30 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
                             entry += fmt.Sprint(as.ASN) + " "   
                         }
                         entry += "\n"
-                        entries, ok := routeMaps[l[1-nameId].Ip]
+                        entries, ok := routeMapsOut[l[1-nameId].Ip]
                         if ok {
-                            routeMaps[l[1-nameId].Ip] = append(entries, entry)
+                            routeMapsOut[l[1-nameId].Ip] = append(entries, entry)
                         } else {
-                            routeMaps[l[1-nameId].Ip] = []string{entry}
+                            routeMapsOut[l[1-nameId].Ip] = []string{entry}
                         }
-					}
-					break out
-				}
+                    }
+                    community := as.Communities[i]
+                    var entry string
+                    if community == "Peer" {
+                        entry = " set community 1\n"
+                    } else if community == "Client" {
+                        entry = " set community 2\n"
+                    } else if community == "Provider" {
+                        entry = " set community 3\n"
+                    }
+                    entries, ok := routeMapsIn[l[1-nameId].Ip]
+                    if ok {
+                        routeMapsIn[l[1-nameId].Ip] = append(entries, entry)
+                    } else {
+                        routeMapsIn[l[1-nameId].Ip] = []string{entry}
+                    }
+                    break out
+                }
 			}
 		}
 	}
@@ -213,10 +236,20 @@ func generateConfs(ASList []utils.AS, as utils.AS, index int, global []utils.Lin
         replacements[11]  = "ipv6 route " + aggregNet.ToString(true) + " null0"
     }
 
-    for k, v := range routeMaps {
+    for k, v := range routeMapsOut {
         IP := k.ToString(false)
-        replacements[7] += "  neighbor " + IP + " route-map MAP-" + IP + " out\n"
-        replacements[9] += "route-map MAP-" + IP + " permit 10\n"
+        replacements[7] += "  neighbor " + IP + " route-map OUTMAP-" + IP + " out\n"
+        replacements[9] += "route-map OUTMAP-" + IP + " permit 10\n"
+        for _, s := range v {
+            replacements[9] += s
+        }
+        replacements[9] += "!\n"
+    }
+
+    for k, v := range routeMapsIn {
+        IP := k.ToString(false)
+        replacements[7] += "  neighbor " + IP + " route-map INMAP-" + IP + " in\n"
+        replacements[9] += "route-map INMAP-"+ IP + " permit 10\n"
         for _, s := range v {
             replacements[9] += s
         }
@@ -257,7 +290,8 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 		}
 	}
 
-    routeMaps := make(map[utils.IP]([]string))
+    routeMapsOut := make(map[utils.IP]([]string))
+    routeMapsIn := make(map[utils.IP]([]string))
 
     type MedReplacement struct {
         ip utils.IP
@@ -275,11 +309,11 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
     }
 
     for _, m := range medsReplacements {
-        entries, ok := routeMaps[m.ip]
+        entries, ok := routeMapsOut[m.ip]
         if ok {
             entries = append(entries, " set metric " + fmt.Sprint(m.med) + "\n")
         } else {
-            routeMaps[m.ip] = []string{" set metric " + fmt.Sprint(m.med) + "\n"}
+            routeMapsOut[m.ip] = []string{" set metric " + fmt.Sprint(m.med) + "\n"}
         }
     }
 
@@ -330,13 +364,19 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
 			replacements[6] += "\t\tneighbor " + IP + " remote-as " + fmt.Sprint(as.ASN) + "\n"
 			replacements[6] += "\t\tneighbor " + IP + " update-source Loopback0\n"
 			replacements[7] += "\t\t\tneighbor " + IP + " activate\n"
+			replacements[7] += "\t\t\tneighbor " + IP + " send-community\n"
 			pref := as.LocalPrefs[index][neighborIndex]
 			if pref != 0 {
-				replacements[7] += "\t\t\tneighbor " + IP + " route-map LOCAL-PREF-" + IP + " in\n"
-				replacements[7] += "\t\t\troute-map LOCAL-PREF-" + IP + "\n"
-				replacements[7] += "\t\t\t\tset local-preference " + fmt.Sprint(pref) + "\n"
-				replacements[7] += "\t\t\t\texit\nrouter bgp " + replacements[4] + "\naddress-family ipv6 unicast\n"
-			}
+                var ip utils.IP
+                ip.ToInt(IP + "/0")
+                entry := " set local-preference "+ fmt.Sprint(pref) + "\n"
+                entries, ok := routeMapsIn[ip]
+                if ok {
+                    routeMapsIn[ip] = append(entries, entry)
+                } else {
+                    routeMapsIn[ip] = []string{entry}
+                }
+            }
 		}
 	}
 
@@ -364,12 +404,27 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
                             entry += fmt.Sprint(as.ASN) + " "   
                         }
                         entry += "\n"
-                        entries, ok := routeMaps[l[1-nameId].Ip]
+                        entries, ok := routeMapsOut[l[1-nameId].Ip]
                         if ok {
-                            routeMaps[l[1-nameId].Ip] = append(entries, entry)
+                            routeMapsOut[l[1-nameId].Ip] = append(entries, entry)
                         } else {
-                            routeMaps[l[1-nameId].Ip] = []string{entry}
+                            routeMapsOut[l[1-nameId].Ip] = []string{entry}
                         }
+                    }
+                    community := as.Communities[i]
+                    var entry string
+                    if community == "Peer" {
+                        entry = "\t\t\t\tset community 1\n"
+                    } else if community == "Client" {
+                        entry = "\t\t\t\tset community 2\n"
+                    } else if community == "Provider" {
+                        entry = "\t\t\t\tset community 3\n"
+                    }
+                    entries, ok := routeMapsIn[l[1-nameId].Ip]
+                    if ok {
+                        routeMapsIn[l[1-nameId].Ip] = append(entries, entry)
+                    } else {
+                        routeMapsIn[l[1-nameId].Ip] = []string{entry}
                     }
                     break out
                 }
@@ -400,7 +455,7 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
         replacements[10]  = "ipv6 route " + aggregNet.ToString(true) + " null0"
     }
 
-    for k, v := range routeMaps {
+    for k, v := range routeMapsOut {
         IP := k.ToString(false)
         replacements[7] += "\t\t\tneighbor " + IP + " route-map MAP-" + IP + " out\n"
         replacements[7] += "\t\t\t\troute-map MAP-" + IP + " permit 10\n"
@@ -410,7 +465,16 @@ func generateTelnet(ASList []utils.AS, as utils.AS, index int, global []utils.Li
         replacements[7] += "\t\t\t\texit\nrouter bgp " + replacements[4] + "\naddress-family ipv6 unicast\n"
     }
 
-    
+    for k, v := range routeMapsIn {
+        IP := k.ToString(false)
+        replacements[7] += "\t\t\tneighbor " + IP + " route-map INMAP-" + IP + " in\n"
+        replacements[7] += "\t\t\t\troute-map INMAP-"+ IP + " permit 10\n"
+        for _, s := range v {
+            replacements[7] += s
+        }
+        replacements[7] += "\t\t\t\texit\nrouter bgp " + replacements[4] + "\naddress-family ipv6 unicast\n"
+    }
+
 	replacements[3] = strings.Trim(replacements[3], "\n")
 	replacements[6] = strings.Trim(replacements[6], "\n")
 	replacements[7] = strings.Trim(replacements[7], "\n")
@@ -473,16 +537,9 @@ func main() {
 	var wg sync.WaitGroup
 
 	// On importe le contenu des fichiers .json de AS
-	var ASList []utils.AS
-	ASList = append(ASList, utils.ImportAS("./intent/AS1.json"))
-	ASList = append(ASList, utils.ImportAS("./intent/AS2.json"))
+    ASList := utils.ImportAS("./intent/")
 
-	// On assigne les ASN aux AS
-	for i := 0; i < len(ASList); i++ {
-		ASList[i].ASN = i + 1
-	}
-
-	// On import les liens eBGP des ASBR
+    // On import les liens eBGP des ASBR
 	global, meds, ipRange := utils.ImportGlobal("./intent/Global.json", ASList)
 
     fmt.Println("==========")
@@ -524,8 +581,8 @@ func main() {
 			}
 		}
 	} else if *modePtr == "config" {
-		if _, err := os.Stat("../out"); os.IsNotExist(err) {
-			os.Mkdir("../out", 0700)
+		if _, err := os.Stat("./out"); os.IsNotExist(err) {
+			os.Mkdir("./out", 0700)
 		}
 		// On importe la template
 		templateByte, err := ioutil.ReadFile("./template/template.cfg")

@@ -1,0 +1,9 @@
+{
+    "protocol": "RIP",
+    "routers": [7, 8, 9],
+    "links": [
+        [{"id": 7, "interface": "FastEthernet0/1"}, {"id": 8, "interface": "FastEthernet0/0"}],
+        [{"id": 8, "interface": "FastEthernet0/1"}, {"id": 9, "interface": "FastEthernet0/0"}]
+    ],
+    "local_prefs": []
+}

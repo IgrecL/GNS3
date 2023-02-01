@@ -1,16 +1,17 @@
 {
     "ip_range": ["2000::0/64"],
     "links": [
-        [{"id": 6, "interface": "FastEthernet1/0"}, {"id": 8, "interface": "FastEthernet1/0"}],
-        [{"id": 7, "interface": "FastEthernet1/0"}, {"id": 9, "interface": "FastEthernet1/0"}]
+        [{"id": 1, "interface": "FastEthernet1/0"}, {"id": 7, "interface": "FastEthernet0/0"}],
+        [{"id": 9, "interface": "FastEthernet0/1"}, {"id": 6, "interface": "FastEthernet1/0"}],
+        [{"id": 3, "interface": "FastEthernet0/1"}, {"id": 4, "interface": "FastEthernet0/1"}],
+        [{"id": 2, "interface": "FastEthernet0/1"}, {"id": 5, "interface": "FastEthernet0/1"}],
+        [{"id": 8, "interface": "FastEthernet1/0"}, {"id": 4, "interface": "FastEthernet1/0"}]
     ],
     "as_prepends": [
         {"from": 1, "to": 2, "times": 5}
     ],
-    "MED": [
-        {"id1": 6, "id2": 8, "value": 10},
-        {"id1": 7, "id2": 9, "value": 30},
-        {"id1": 8, "id2": 6, "value": 20},
-        {"id1": 9, "id2": 7, "value": 15}
+    "MED": [],
+    "communities": [
+        {"client": 2, "provider": 1}
     ]
 }

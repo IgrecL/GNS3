@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+    "strings"
+    "strconv"
+    "io/ioutil"
 )
 
 func ImportGlobal(url string, ASList []AS) ([]Link, [][2]int, [2]IP) {
@@ -91,113 +94,161 @@ func ImportGlobal(url string, ASList []AS) ([]Link, [][2]int, [2]IP) {
         }
 	}
 
+    for i, _ := range ASList {
+        ASList[i].Communities = make([]string, len(ASList))
+        for j, _ := range ASList[i].Communities {
+            ASList[i].Communities[j] = "Peer"
+        }
+    }
+
+    for _, value := range linksMap["communities"].([]any) {
+		client := int(value.(map[string]any)["client"].(float64))
+		provider := int(value.(map[string]any)["provider"].(float64))
+        
+        var asClient, asProvider AS
+        var indClient, indProvider int
+        for i, as := range ASList {
+            if as.ASN == client {
+                asClient = as
+                indClient = i
+            } else if as.ASN == provider {
+                asProvider = as
+                indProvider = i
+            }
+        }
+        
+        asClient.Communities[indProvider] = "Provider"
+        asProvider.Communities[indClient] = "Client"
+	}
+
+    for _, as := range ASList {
+        fmt.Println("Communities", as.Communities)
+    }
+
+
 	return links, meds, ipRange
 }
 
-func ImportAS(url string) AS {
+func ImportAS(url string) []AS {
 	// Importing .json files
-	file, _ := os.Open(url)
-	defer file.Close()
 
-	// Lecture du .json
-	data, err := io.ReadAll(file)
-	if err != nil {
-		fmt.Println(err)
-		return *new(AS)
-	}
+    files, err := ioutil.ReadDir(url)
+    if err != nil {
+        fmt.Println("Error while reading", url, "folder")
+        return []AS{}
+    }
 
-	// On caste le contenu en map de string
-	var ASMap map[string]any
-	err = json.Unmarshal([]byte(data), &ASMap)
-	if err != nil {
-		fmt.Println(err)
-		return *new(AS)
-	}
+    var ASList []AS
+    for _, f := range files {
+        if strings.HasPrefix(f.Name(), "AS") && strings.HasSuffix(f.Name(), ".json") {
+            index, _ := strconv.Atoi(f.Name()[2:(len(f.Name()) - 5)])
 
-	// On importe le protocole IGP utilisé
-	var as AS
-	as.IGP = ASMap["protocol"].(string)
+            file, _ := os.Open(url + f.Name())
+            defer file.Close()
 
-	// On importe la liste des routeurs de l'AS
-	for _, value := range ASMap["routers"].([]any) {
-		as.RoutersId = append(as.RoutersId, int(value.(float64)))
-	}
+            // Lecture du .json
+            data, err := io.ReadAll(file)
+            if err != nil {
+                fmt.Println(err)
+                return []AS{}
+            }
 
-	// On initialise la matrice d'adjacence
-	as.Adj = make([][]*Link, len(as.RoutersId))
-	for i := range as.RoutersId {
-		as.Adj[i] = make([]*Link, len(as.RoutersId))
-	}
+            // On caste le contenu en map de string
+            var ASMap map[string]any
+            err = json.Unmarshal([]byte(data), &ASMap)
+            if err != nil {
+                fmt.Println(err)
+                return []AS{}
+            }
 
-	// On remplit la matrice d'adjacence
-	for _, value := range ASMap["links"].([]any) {
+            // On importe le protocole IGP utilisé
+            var as AS
+            as.IGP = ASMap["protocol"].(string)
 
-		// On récupère les id et les noms d'interface
-		var int1, int2 Interface
-		int1.RouterId = int(value.([]any)[0].(map[string]any)["id"].(float64))
-		int2.RouterId = int(value.([]any)[1].(map[string]any)["id"].(float64))
-		int1.Name = value.([]any)[0].(map[string]any)["interface"].(string)
-		int2.Name = value.([]any)[1].(map[string]any)["interface"].(string)
-		if as.IGP == "OSPF" {
-			if len(value.([]any)[0].(map[string]any)) == 3 {
-				int1.OSPFCost = int(value.([]any)[0].(map[string]any)["ospf_cost"].(float64))
-			} else {
-				int1.OSPFCost = -1
-			}
+            // On importe la liste des routeurs de l'AS
+            for _, value := range ASMap["routers"].([]any) {
+                as.RoutersId = append(as.RoutersId, int(value.(float64)))
+            }
 
-			if len(value.([]any)[1].(map[string]any)) == 3 { 
-				int2.OSPFCost = int(value.([]any)[1].(map[string]any)["ospf_cost"].(float64))
-			} else {
-				int2.OSPFCost = -1
-			}
-		}
-		var link Link
-		link[0], link[1] = int1, int2
+            // On initialise la matrice d'adjacence
+            as.Adj = make([][]*Link, len(as.RoutersId))
+            for i := range as.RoutersId {
+                as.Adj[i] = make([]*Link, len(as.RoutersId))
+            }
 
-		// On récupère l'indice du routeur dans la liste de routeurs
-		var index1, index2 int
-		for i, id := range as.RoutersId {
-			if id == int1.RouterId {
-				index1 = i
-			}
-			if id == int2.RouterId {
-				index2 = i
-			}
-		}
+            // On remplit la matrice d'adjacence
+            for _, value := range ASMap["links"].([]any) {
 
-		// On remplit la matrice d'adjacence de liens
-		as.Adj[index1][index2] = &link
-		as.Adj[index2][index1] = &link
-	}
+                // On récupère les id et les noms d'interface
+                var int1, int2 Interface
+                int1.RouterId = int(value.([]any)[0].(map[string]any)["id"].(float64))
+                int2.RouterId = int(value.([]any)[1].(map[string]any)["id"].(float64))
+                int1.Name = value.([]any)[0].(map[string]any)["interface"].(string)
+                int2.Name = value.([]any)[1].(map[string]any)["interface"].(string)
+                if as.IGP == "OSPF" {
+                    if len(value.([]any)[0].(map[string]any)) == 3 {
+                        int1.OSPFCost = int(value.([]any)[0].(map[string]any)["ospf_cost"].(float64))
+                    } else {
+                        int1.OSPFCost = -1
+                    }
 
-	as.LocalPrefs = make([][]int, len(as.RoutersId))
-	for i := range as.RoutersId {
-		as.LocalPrefs[i] = make([]int, len(as.RoutersId))
-	}
- 
-	for _, value := range ASMap["local_prefs"].([]any) {
-		id1 := int(value.(map[string]any)["id1"].(float64))
-		id2 := int(value.(map[string]any)["id2"].(float64))
-		pref := int(value.(map[string]any)["pref"].(float64))
-	
-		index1, index2 := -1, -1
-		for i, v := range as.RoutersId {
-			if id1 == v {
-				index1 = i
-			} else if id2 == v {
-				index2 = i
-			}
-		}
-		if index1 == -1 || index2 == -1 {
-			fmt.Println("Error while loading local prefs")
-			break
-		}
+                    if len(value.([]any)[1].(map[string]any)) == 3 { 
+                        int2.OSPFCost = int(value.([]any)[1].(map[string]any)["ospf_cost"].(float64))
+                    } else {
+                        int2.OSPFCost = -1
+                    }
+                }
+                var link Link
+                link[0], link[1] = int1, int2
 
-		as.LocalPrefs[index1][index2] = pref
-	}
+                // On récupère l'indice du routeur dans la liste de routeurs
+                var index1, index2 int
+                for i, id := range as.RoutersId {
+                    if id == int1.RouterId {
+                        index1 = i
+                    }
+                    if id == int2.RouterId {
+                        index2 = i
+                    }
+                }
 
+                // On remplit la matrice d'adjacence de liens
+                as.Adj[index1][index2] = &link
+                as.Adj[index2][index1] = &link
+            }
 
-	return as
+            as.LocalPrefs = make([][]int, len(as.RoutersId))
+            for i := range as.RoutersId {
+                as.LocalPrefs[i] = make([]int, len(as.RoutersId))
+            }
+
+            for _, value := range ASMap["local_prefs"].([]any) {
+                id1 := int(value.(map[string]any)["id1"].(float64))
+                id2 := int(value.(map[string]any)["id2"].(float64))
+                pref := int(value.(map[string]any)["pref"].(float64))
+
+                index1, index2 := -1, -1
+                for i, v := range as.RoutersId {
+                    if id1 == v {
+                        index1 = i
+                    } else if id2 == v {
+                        index2 = i
+                    }
+                }
+                if index1 == -1 || index2 == -1 {
+                    fmt.Println("Error while loading local prefs")
+                    break
+                }
+
+                as.LocalPrefs[index1][index2] = pref
+            }
+
+            as.ASN = index
+            ASList = append(ASList, as)
+        }
+    }
+
+	return ASList
 }
 
 func ImportAdmin(url string) []struct{ID int; IP string} {
